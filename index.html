@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="shortcut icon" href="../../assets/logo.svg" type="image/gif" />
+<meta name="description" content="Generate and download your own customized UPSC Civil Services Examination (CSE) Mains Previous Year Questions (PYQ) Question-cum-Answer Booklet (QCAB) PDF for free. Select questions based on year, General Studies (GS) paper, or syllabus topic to create a personalized practice booklet.">
+<meta name="keywords" content="UPSC, CSE, Mains, PYQ, QCAB, PDF, GS1, GS2, GS3, GS4, 2025, 2024, 2023, 2022, Previous Year Questions, Question Paper, Answer Booklet, GS Paper, General Studies, Syllabus, Download, Free, Mock Test, Practice Paper, Civil Services, Exam Preparation, UPSC Mains Practice">
+<meta name="author" content="Anand Kumar Verma">
+<title>Download UPSC Mains PYQ QCAB PDF</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <div class="main-content">
+
+        <h3>UPSC Mains PYQ QCAB Generator</h3>
+        <div class="filter-mode">
+            <label><input type="radio" name="mode" value="year-gs" checked> Year + GS Paper</label>
+            <label><input type="radio" name="mode" value="gs-syllabus"> GS Paper + Syllabus Topic</label>
+        </div>
+
+        <div id="filters"></div>
+
+        <!-- Random question configuration -->
+        <div id="randomQuestionPanel" style="display:none; margin:15px 0;">
+            <label>
+                Number of Questions
+                <input type="number" id="randomQuestionCount" min="1" value="10">
+            </label>
+
+            <label>
+                Subject
+                <select id="randomSubject">
+                    <option value="">-- Select Subject --</option>
+                    <option value="essay">Essay</option>
+                    <option value="gs">GS</option>
+                    <option value="gs-paper">Specific Paper</option>
+                </select>
+            </label>
+
+            <select id="randomGsPaper" style="display:none;">
+                <option value="">-- Select GS Paper --</option>
+            </select>
+
+            <button id="generateRandomQuestions" type="button">
+                Generate Random
+            </button>
+        </div>
+
+<div id="customQuestionPanel" style="display:none; margin:15px 0;">
+
+
+    <label>
+        10 Markers
+        <input type="number" id="custom10" min="0" value="0">
+    </label>
+
+    <label>
+        15 Markers
+        <input type="number" id="custom15" min="0" value="0">
+    </label>
+
+    <label>
+        20 Markers
+        <input type="number" id="custom20" min="0" value="0">
+    </label>
+
+    <button id="addCustomQuestions">
+        Add Questions
+    </button>
+
+   <input
+    type="file"
+    id="importMarkdownFile"
+    accept=".md,text/markdown"
+    style="display:none;">
+
+        <button id="importMarkdown">
+    Import .md
+    </button>
+
+</div>
+
+
+ 
+
+        <div id="selectedSummary" style="margin-bottom:10px; display:none;">
+            Selected Questions: <span id="selectedCount">0</span>, Total Marks: <span id="totalMarks">0</span>,
+            10-mark: <span id="count10">0</span>, 15-mark: <span id="count15">0</span>
+        </div>
+
+        <table id="questionsTable">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="selectAll"></th>
+                    <th>Year</th>
+                    <th>GS Paper</th>
+                    <th>Question Text</th>
+                    <th>Marks</th>
+                    <th>Word Limit</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+<div class="buttons">
+    <button id="generateQCAB">
+        Generate and Download QCAB PDF
+    </button>
+
+    <button id="downloadPDF" style="display:none;">
+        Download QCAB PDF
+    </button>
+
+    <button id="downloadQuestions">
+        Download Questions only
+    </button>
+
+    <button id="downloadAnswersBooklet">
+        Download Answers Booklet only
+    </button>
+
+    <div class="secondary-buttons">
+        <button id="exportMarkdown">
+            Export as .md
+        </button>
+
+        <button id="resetQuestions">
+            Reset All Questions
+        </button>
+    </div>
+</div>
+
+    </div>
+
+
+<script src="js/populateQuestions.js"></script>
+<script src="js/generatePDF.js"></script>
+
+</body>
+</html>
