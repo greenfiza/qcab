@@ -301,17 +301,22 @@ function generateRandomQuestions() {
 
   let eligible = questionsRepo.questions_repository.filter(q => {
     const paper = String(q.gs_paper || "").trim();
+    const paperLower = paper.toLowerCase();
 
     if (subject === "essay") {
-      return paper.toLowerCase() === "essay";
+        return paperLower === "essay";
     }
 
     if (subject === "gs") {
-      return paper.toLowerCase().startsWith("gs");
+        return paperLower.startsWith("gs");
+    }
+
+    if (subject === "sociology") {
+        return paperLower.startsWith("sociology");
     }
 
     return paper === gsPaper;
-  });
+});
 
   if (eligible.length === 0) {
     alert("No questions found for the selected subject.");
