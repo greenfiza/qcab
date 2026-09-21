@@ -323,7 +323,7 @@ function populateRandomSubjectOptions() {
     }
 }
 
-function generateRandomQuestions() {
+async function generateRandomQuestions() {
 
     const countInput =
         document.getElementById("randomQuestionCount");
@@ -334,140 +334,166 @@ function generateRandomQuestions() {
     const count =
         Math.floor(Number(countInput?.value));
 
-    const selectedSubject =
-        String(subjectSelect?.value || "").trim();
+    const subject =
+        String(subjectSelect?.value || "").trim().toLowerCase();
 
 
-    // -----------------------------------------
-    // Validate count
-    // -----------------------------------------
+    // -----------------------------
+    // Validate input
+    // -----------------------------
 
     if (!Number.isFinite(count) || count < 1) {
         alert("Enter a valid number of questions.");
         return;
     }
 
-
-    // -----------------------------------------
-    // Validate subject
-    // -----------------------------------------
-
-    if (!selectedSubject) {
+    if (!subject) {
         alert("Select a subject.");
         return;
     }
 
 
-    // -----------------------------------------
-    // Get the repository exactly as the
-    // rest of the application uses it
-    // -----------------------------------------
+    // -----------------------------
+    // Load JSON directly
+    // -----------------------------
 
-    const repository =
-        questionsRepo?.questions_repository;
+    let repository;
 
-    if (!Array.isArray(repository) || repository.length === 0) {
-        alert("Question repository is not loaded.");
-        console.error("questionsRepo:", questionsRepo);
+    try {
+
+        const response =
+            await fetch("./js/pyqrepository.json", {
+                cache: "no-store"
+            });
+
+        if (!response.ok) {
+            throw new Error(
+                `HTTP ${response.status} ${response.statusText}`
+            );
+        }
+
+        const data =
+            await response.json();
+
+        repository =
+            Array.isArray(data)
+                ? data
+                : data.questions_repository;
+
+    } catch (error) {
+
+        console.error(
+            "Could not load pyqrepository.json:",
+            error
+        );
+
+        alert(
+            "Could not load the question repository.\n\n" +
+            "Open the browser console for details."
+        );
+
         return;
     }
 
 
-    // -----------------------------------------
-    // Normalize text
-    // -----------------------------------------
+    // -----------------------------
+    // Validate JSON
+    // -----------------------------
 
-    const normalize = value =>
-        String(value || "")
-            .trim()
-            .toLowerCase()
-            .replace(/[\s_-]+/g, "");
-
-
-    const subject =
-        normalize(selectedSubject);
-
-
-    // -----------------------------------------
-    // Find questions
-    // -----------------------------------------
-
-    let eligible = repository.filter(q => {
-
-        const paper =
-            normalize(q.gs_paper);
-
-
-        // Essay
-        if (subject === "essay") {
-            return paper === "essay";
-        }
-
-
-        // GS ALL
-        if (
-            subject === "gsall" ||
-            subject === "gsallpapers"
-        ) {
-            return /^gspaper?[1-4]$/.test(paper) ||
-                   /^gs[1-4]$/.test(paper);
-        }
-
-
-        // GS1, GS2, GS3, GS4
-        //
-        // Extract the number from the selected option.
-        //
-        // "GS1"       -> 1
-        // "GS 1"      -> 1
-        // "GS Paper 1" -> 1
-        //
-
-        const selectedGs =
-            subject.match(/^gs(?:paper)?([1-4])$/);
-
-        if (selectedGs) {
-
-            const number =
-                selectedGs[1];
-
-            const paperGs =
-                paper.match(/^gs(?:paper)?([1-4])$/);
-
-            return paperGs &&
-                   paperGs[1] === number;
-        }
-
-
-        // -------------------------------------
-        // Everything else
-        //
-        // IMPORTANT:
-        // Compare against the actual value from
-        // the JSON rather than inventing a value.
-        // -------------------------------------
-
-        return paper === subject;
-    });
-
-
-    // -----------------------------------------
-    // Nothing found
-    // -----------------------------------------
-
-    if (eligible.length === 0) {
+    if (!Array.isArray(repository)) {
 
         console.error(
-            "Random selection failed.",
-            {
-                selectedSubject,
-                availableSubjects: [
-                    ...new Set(
-                        repository.map(q => q.gs_paper)
-                    )
-                ]
-            }
+            "Invalid repository structure:",
+            repository
         );
+
+        alert(
+            "The question JSON was loaded, but its structure is invalid."
+        );
+
+        return;
+    }
+
+
+    if (repository.length === 0) {
+
+        alert("The question repository is empty.");
+
+        return;
+    }
+
+
+    // -----------------------------
+    // Filter questions
+    // -----------------------------
+
+    let eligible =
+        repository.filter(q => {
+
+            const paper =
+                String(q?.gs_paper || "")
+                    .trim()
+                    .toLowerCase();
+
+
+            if (subject === "essay") {
+                return paper === "essay";
+            }
+
+
+            if (subject === "gs1") {
+                return paper === "gs1";
+            }
+
+
+            if (subject === "gs2") {
+                return paper === "gs2";
+            }
+
+
+            if (subject === "gs3") {
+                return paper === "gs3";
+            }
+
+
+            if (subject === "gs4") {
+                return paper === "gs4";
+            }
+
+
+            if (subject === "gs-all") {
+                return paper.startsWith("gs");
+            }
+
+
+            return paper === subject;
+        });
+
+
+    // -----------------------------
+    // Debug information
+    // -----------------------------
+
+    console.log(
+        "Random question generator:",
+        {
+            requestedSubject: subject,
+            repositoryCount: repository.length,
+            eligibleCount: eligible.length,
+            availablePapers: [
+                ...new Set(
+                    repository.map(q => q.gs_paper)
+                )
+            ]
+        }
+    );
+
+
+    // -----------------------------
+    // Nothing found
+    // -----------------------------
+
+    if (eligible.length === 0) {
 
         alert(
             "No questions found for the selected subject."
@@ -477,9 +503,9 @@ function generateRandomQuestions() {
     }
 
 
-    // -----------------------------------------
-    // Prefer questions not already selected
-    // -----------------------------------------
+    // -----------------------------
+    // Prefer unselected questions
+    // -----------------------------
 
     const unselected =
         eligible.filter(q =>
@@ -501,11 +527,15 @@ function generateRandomQuestions() {
     }
 
 
-    // -----------------------------------------
-    // Fisher-Yates shuffle
-    // -----------------------------------------
+    // -----------------------------
+    // Shuffle
+    // -----------------------------
 
-    for (let i = eligible.length - 1; i > 0; i--) {
+    for (
+        let i = eligible.length - 1;
+        i > 0;
+        i--
+    ) {
 
         const j =
             Math.floor(Math.random() * (i + 1));
@@ -515,41 +545,50 @@ function generateRandomQuestions() {
     }
 
 
-    // -----------------------------------------
+    // -----------------------------
     // Select
-    // -----------------------------------------
+    // -----------------------------
 
     const selected =
         eligible.slice(0, count);
 
 
-    // -----------------------------------------
+    // -----------------------------
     // Sort by marks
-    // -----------------------------------------
+    // -----------------------------
 
-    selected.sort((a, b) =>
-        Number(a.marks || 0) -
-        Number(b.marks || 0)
+    selected.sort(
+        (a, b) =>
+            Number(a.marks || 0) -
+            Number(b.marks || 0)
     );
 
 
-    // -----------------------------------------
-    // Add to selection
-    // -----------------------------------------
+    // -----------------------------
+    // Mark selected
+    // -----------------------------
 
     selected.forEach(q => {
+
+        // Make sure imported/reloaded
+        // repository questions have IDs.
+        if (!q._selectionId) {
+            q._selectionId =
+                `repo_random_${Math.random()
+                    .toString(36)
+                    .slice(2)}`;
+        }
 
         selectionMap.set(
             q._selectionId,
             true
         );
-
     });
 
 
-    // -----------------------------------------
-    // Populate existing table
-    // -----------------------------------------
+    // -----------------------------
+    // Populate table
+    // -----------------------------
 
     tbody.innerHTML = "";
 
@@ -558,12 +597,14 @@ function generateRandomQuestions() {
     updateSummary();
 
 
-    // -----------------------------------------
-    // Close random panel
-    // -----------------------------------------
+    // -----------------------------
+    // Close panel
+    // -----------------------------
 
     const panel =
-        document.getElementById("randomQuestionPanel");
+        document.getElementById(
+            "randomQuestionPanel"
+        );
 
     if (panel) {
         panel.style.display = "none";
