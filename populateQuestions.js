@@ -299,10 +299,12 @@ function generateRandomQuestions() {
     return;
   }
 
+
+  
 let eligible = questionsRepo.questions_repository.filter(q => {
 
     const paper = String(q.gs_paper || "").trim().toLowerCase();
-    const questionId = String(q.question_id || "").trim();
+    const questionId = String(q.question_id || "").trim().toLowerCase();
 
     if (subject === "essay") {
         return paper === "essay";
@@ -313,7 +315,7 @@ let eligible = questionsRepo.questions_repository.filter(q => {
     }
 
     if (subject === "sociology") {
-        return /^soc[12]_/i.test(questionId);
+        return questionId.startsWith("soc");
     }
 
     if (subject === "gs-paper") {
@@ -323,10 +325,10 @@ let eligible = questionsRepo.questions_repository.filter(q => {
     return false;
 });
 
-  if (eligible.length === 0) {
+if (eligible.length === 0) {
     alert("No questions found for the selected subject.");
     return;
-  }
+}
 
   // Prefer questions that are not already selected.
   const unselected = eligible.filter(q => !selectionMap.get(q._selectionId));
