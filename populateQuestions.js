@@ -324,160 +324,195 @@ function populateRandomSubjectOptions() {
 }
 
 function generateRandomQuestions() {
-    const countInput = document.getElementById("randomQuestionCount");
-    const subjectSelect = document.getElementById("randomSubject");
+
+    const countInput =
+        document.getElementById("randomQuestionCount");
+
+    const subjectSelect =
+        document.getElementById("randomSubject");
+
+    const count =
+        Math.floor(Number(countInput?.value));
+
+    const subject =
+        String(subjectSelect?.value || "")
+            .trim()
+            .toLowerCase();
+
 
     // -----------------------------
-    // Validate inputs
+    // Validate count
     // -----------------------------
-    const count = Math.floor(Number(countInput?.value));
-    const subject = String(subjectSelect?.value || "").trim().toLowerCase();
 
     if (!Number.isFinite(count) || count < 1) {
         alert("Enter a valid number of questions.");
         return;
     }
 
+
+    // -----------------------------
+    // Validate subject
+    // -----------------------------
+
     if (!subject) {
         alert("Select a subject.");
         return;
     }
 
-    // -----------------------------
-    // Safely get repository
-    // -----------------------------
-    const repository =
-        Array.isArray(questionsRepo)
-            ? questionsRepo
-            : Array.isArray(questionsRepo?.questions_repository)
-                ? questionsRepo.questions_repository
-                : [];
 
-    if (repository.length === 0) {
-        alert("Question repository is empty or could not be loaded.");
-        console.error("Question repository:", questionsRepo);
+    // =========================================================
+    // GET QUESTIONS USING THE SAME LOOKUP SYSTEM
+    // USED BY THE REST OF THE APPLICATION
+    // =========================================================
+
+    const questionMap = questionLookupMap();
+
+    const allQuestions =
+        Array.from(questionMap.values());
+
+
+    if (!allQuestions.length) {
+        alert("No questions are available.");
         return;
     }
 
-    // -----------------------------
-    // Find eligible questions
-    // -----------------------------
-    let eligible = repository.filter(q => {
 
-        const paper = String(q?.gs_paper || "")
-            .trim()
-            .toLowerCase();
+    // =========================================================
+    // FILTER BY SUBJECT
+    // =========================================================
 
-        if (!paper) {
-            return false;
-        }
+    let eligible = allQuestions.filter(q => {
+
+        const paper =
+            String(q.gs_paper || "")
+                .trim()
+                .toLowerCase();
+
 
         // Essay
         if (subject === "essay") {
             return paper === "essay";
         }
 
-        // Individual GS papers
+
+        // GS1 / GS2 / GS3 / GS4
         if (/^gs[1-4]$/.test(subject)) {
             return paper === subject;
         }
+
 
         // All GS papers
         if (subject === "gs-all") {
             return /^gs[1-4]$/.test(paper);
         }
 
-        // Any other paper – exact match
+
+        // Any other paper
         return paper === subject;
     });
 
-    // -----------------------------
-    // No questions found
-    // -----------------------------
-    if (eligible.length === 0) {
-        alert("No questions found for the selected subject.");
 
-        console.warn("Random question search:", {
-            requestedSubject: subject,
-            availablePapers: [
-                ...new Set(
-                    repository.map(q =>
-                        String(q?.gs_paper || "").trim()
-                    ).filter(Boolean)
-                )
-            ]
-        });
+    // =========================================================
+    // CHECK AVAILABILITY
+    // =========================================================
+
+    if (eligible.length === 0) {
+
+        alert(
+            "No questions found for the selected subject."
+        );
 
         return;
     }
 
-    // -----------------------------
-    // Prefer unselected questions
-    // -----------------------------
-    const unselected = eligible.filter(q =>
-        !selectionMap.get(q._selectionId)
-    );
+
+    // =========================================================
+    // PREFER QUESTIONS NOT ALREADY SELECTED
+    // =========================================================
+
+    const unselected =
+        eligible.filter(q =>
+            !selectionMap.get(q._selectionId)
+        );
+
 
     if (unselected.length >= count) {
+
         eligible = unselected;
+
     } else if (eligible.length < count) {
+
         alert(
             `Only ${eligible.length} eligible questions are available.`
         );
+
         return;
     }
-    // If there aren't enough unselected questions,
-    // but there are enough total questions, use all eligible ones.
-    else {
-        eligible = eligible.slice();
-    }
 
-    // -----------------------------
-    // Fisher-Yates shuffle
-    // -----------------------------
+
+    // =========================================================
+    // SHUFFLE
+    // =========================================================
+
     for (let i = eligible.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+
+        const j =
+            Math.floor(Math.random() * (i + 1));
 
         [eligible[i], eligible[j]] =
             [eligible[j], eligible[i]];
     }
 
-    // -----------------------------
-    // Select requested number
-    // -----------------------------
-    const selected = eligible.slice(0, count);
 
-    // -----------------------------
-    // Sort by marks
-    // -----------------------------
-    selected.sort((a, b) => {
-        return Number(a?.marks || 0) -
-               Number(b?.marks || 0);
-    });
+    // =========================================================
+    // SELECT
+    // =========================================================
 
-    // -----------------------------
-    // Mark as selected
-    // -----------------------------
+    const selected =
+        eligible.slice(0, count);
+
+
+    // =========================================================
+    // SORT BY MARKS
+    // =========================================================
+
+    selected.sort((a, b) =>
+        Number(a.marks || 0) -
+        Number(b.marks || 0)
+    );
+
+
+    // =========================================================
+    // MARK AS SELECTED
+    // =========================================================
+
     selected.forEach(q => {
-        if (q._selectionId) {
-            selectionMap.set(q._selectionId, true);
-        }
+
+        selectionMap.set(
+            q._selectionId,
+            true
+        );
+
     });
 
-    // -----------------------------
-    // Populate table
-    // -----------------------------
-    if (tbody) {
-        tbody.innerHTML = "";
-        buildTableRows(selected);
-    }
+
+    // =========================================================
+    // PUT INTO EXISTING TABLE
+    // =========================================================
+
+    tbody.innerHTML = "";
+
+    buildTableRows(selected);
 
     updateSummary();
 
-    // -----------------------------
-    // Close random panel
-    // -----------------------------
-    const panel = document.getElementById("randomQuestionPanel");
+
+    // =========================================================
+    // CLOSE RANDOM PANEL
+    // =========================================================
+
+    const panel =
+        document.getElementById("randomQuestionPanel");
 
     if (panel) {
         panel.style.display = "none";
