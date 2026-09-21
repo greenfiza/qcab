@@ -334,15 +334,13 @@ function generateRandomQuestions() {
     const count =
         Math.floor(Number(countInput?.value));
 
-    const subject =
-        String(subjectSelect?.value || "")
-            .trim()
-            .toLowerCase();
+    const selectedSubject =
+        String(subjectSelect?.value || "").trim();
 
 
-    // -----------------------------
+    // -----------------------------------------
     // Validate count
-    // -----------------------------
+    // -----------------------------------------
 
     if (!Number.isFinite(count) || count < 1) {
         alert("Enter a valid number of questions.");
@@ -350,43 +348,54 @@ function generateRandomQuestions() {
     }
 
 
-    // -----------------------------
+    // -----------------------------------------
     // Validate subject
-    // -----------------------------
+    // -----------------------------------------
 
-    if (!subject) {
+    if (!selectedSubject) {
         alert("Select a subject.");
         return;
     }
 
 
-    // =========================================================
-    // GET QUESTIONS USING THE SAME LOOKUP SYSTEM
-    // USED BY THE REST OF THE APPLICATION
-    // =========================================================
+    // -----------------------------------------
+    // Get the repository exactly as the
+    // rest of the application uses it
+    // -----------------------------------------
 
-    const questionMap = questionLookupMap();
+    const repository =
+        questionsRepo?.questions_repository;
 
-    const allQuestions =
-        Array.from(questionMap.values());
-
-
-    if (!allQuestions.length) {
-        alert("No questions are available.");
+    if (!Array.isArray(repository) || repository.length === 0) {
+        alert("Question repository is not loaded.");
+        console.error("questionsRepo:", questionsRepo);
         return;
     }
 
 
-    // =========================================================
-    // FILTER BY SUBJECT
-    // =========================================================
+    // -----------------------------------------
+    // Normalize text
+    // -----------------------------------------
 
-    let eligible = allQuestions.filter(q => {
+    const normalize = value =>
+        String(value || "")
+            .trim()
+            .toLowerCase()
+            .replace(/[\s_-]+/g, "");
+
+
+    const subject =
+        normalize(selectedSubject);
+
+
+    // -----------------------------------------
+    // Find questions
+    // -----------------------------------------
+
+    let eligible = repository.filter(q => {
 
         const paper =
-            String(q.gs_paper || "")
-                .trim()
-                .toLowerCase();
+            normalize(q.gs_paper);
 
 
         // Essay
@@ -395,28 +404,70 @@ function generateRandomQuestions() {
         }
 
 
-        // GS1 / GS2 / GS3 / GS4
-        if (/^gs[1-4]$/.test(subject)) {
-            return paper === subject;
+        // GS ALL
+        if (
+            subject === "gsall" ||
+            subject === "gsallpapers"
+        ) {
+            return /^gspaper?[1-4]$/.test(paper) ||
+                   /^gs[1-4]$/.test(paper);
         }
 
 
-        // All GS papers
-        if (subject === "gs-all") {
-            return /^gs[1-4]$/.test(paper);
+        // GS1, GS2, GS3, GS4
+        //
+        // Extract the number from the selected option.
+        //
+        // "GS1"       -> 1
+        // "GS 1"      -> 1
+        // "GS Paper 1" -> 1
+        //
+
+        const selectedGs =
+            subject.match(/^gs(?:paper)?([1-4])$/);
+
+        if (selectedGs) {
+
+            const number =
+                selectedGs[1];
+
+            const paperGs =
+                paper.match(/^gs(?:paper)?([1-4])$/);
+
+            return paperGs &&
+                   paperGs[1] === number;
         }
 
 
-        // Any other paper
+        // -------------------------------------
+        // Everything else
+        //
+        // IMPORTANT:
+        // Compare against the actual value from
+        // the JSON rather than inventing a value.
+        // -------------------------------------
+
         return paper === subject;
     });
 
 
-    // =========================================================
-    // CHECK AVAILABILITY
-    // =========================================================
+    // -----------------------------------------
+    // Nothing found
+    // -----------------------------------------
 
     if (eligible.length === 0) {
+
+        console.error(
+            "Random selection failed.",
+            {
+                selectedSubject,
+                availableSubjects: [
+                    ...new Set(
+                        repository.map(q => q.gs_paper)
+                    )
+                ]
+            }
+        );
 
         alert(
             "No questions found for the selected subject."
@@ -426,9 +477,9 @@ function generateRandomQuestions() {
     }
 
 
-    // =========================================================
-    // PREFER QUESTIONS NOT ALREADY SELECTED
-    // =========================================================
+    // -----------------------------------------
+    // Prefer questions not already selected
+    // -----------------------------------------
 
     const unselected =
         eligible.filter(q =>
@@ -450,9 +501,9 @@ function generateRandomQuestions() {
     }
 
 
-    // =========================================================
-    // SHUFFLE
-    // =========================================================
+    // -----------------------------------------
+    // Fisher-Yates shuffle
+    // -----------------------------------------
 
     for (let i = eligible.length - 1; i > 0; i--) {
 
@@ -464,17 +515,17 @@ function generateRandomQuestions() {
     }
 
 
-    // =========================================================
-    // SELECT
-    // =========================================================
+    // -----------------------------------------
+    // Select
+    // -----------------------------------------
 
     const selected =
         eligible.slice(0, count);
 
 
-    // =========================================================
-    // SORT BY MARKS
-    // =========================================================
+    // -----------------------------------------
+    // Sort by marks
+    // -----------------------------------------
 
     selected.sort((a, b) =>
         Number(a.marks || 0) -
@@ -482,9 +533,9 @@ function generateRandomQuestions() {
     );
 
 
-    // =========================================================
-    // MARK AS SELECTED
-    // =========================================================
+    // -----------------------------------------
+    // Add to selection
+    // -----------------------------------------
 
     selected.forEach(q => {
 
@@ -496,9 +547,9 @@ function generateRandomQuestions() {
     });
 
 
-    // =========================================================
-    // PUT INTO EXISTING TABLE
-    // =========================================================
+    // -----------------------------------------
+    // Populate existing table
+    // -----------------------------------------
 
     tbody.innerHTML = "";
 
@@ -507,9 +558,9 @@ function generateRandomQuestions() {
     updateSummary();
 
 
-    // =========================================================
-    // CLOSE RANDOM PANEL
-    // =========================================================
+    // -----------------------------------------
+    // Close random panel
+    // -----------------------------------------
 
     const panel =
         document.getElementById("randomQuestionPanel");
