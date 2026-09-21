@@ -324,98 +324,164 @@ function populateRandomSubjectOptions() {
 }
 
 function generateRandomQuestions() {
-  const countInput = document.getElementById("randomQuestionCount");
+    const countInput = document.getElementById("randomQuestionCount");
+    const subjectSelect = document.getElementById("randomSubject");
 
-  const subjectSelect =
-    document.getElementById("randomSubject");
+    // -----------------------------
+    // Validate inputs
+    // -----------------------------
+    const count = Math.floor(Number(countInput?.value));
+    const subject = String(subjectSelect?.value || "").trim().toLowerCase();
 
-const count =
-    Math.floor(Number(countInput?.value));
+    if (!Number.isFinite(count) || count < 1) {
+        alert("Enter a valid number of questions.");
+        return;
+    }
 
-const subject =
-    subjectSelect?.value || "";
+    if (!subject) {
+        alert("Select a subject.");
+        return;
+    }
 
-  if (!Number.isFinite(count) || count < 1) {
-    alert("Enter a valid number of questions.");
-    return;
-  }
+    // -----------------------------
+    // Safely get repository
+    // -----------------------------
+    const repository =
+        Array.isArray(questionsRepo)
+            ? questionsRepo
+            : Array.isArray(questionsRepo?.questions_repository)
+                ? questionsRepo.questions_repository
+                : [];
 
-  if (!subject) {
-    alert("Select a subject.");
-    return;
-  }
+    if (repository.length === 0) {
+        alert("Question repository is empty or could not be loaded.");
+        console.error("Question repository:", questionsRepo);
+        return;
+    }
 
+    // -----------------------------
+    // Find eligible questions
+    // -----------------------------
+    let eligible = repository.filter(q => {
 
-let eligible =
-    questionsRepo.questions_repository.filter(q => {
+        const paper = String(q?.gs_paper || "")
+            .trim()
+            .toLowerCase();
 
-        const paper =
-            String(q.gs_paper || "")
-                .trim()
-                .toLowerCase();
+        if (!paper) {
+            return false;
+        }
 
+        // Essay
         if (subject === "essay") {
             return paper === "essay";
         }
 
-        if (subject === "gs1") {
-            return paper === "gs1";
+        // Individual GS papers
+        if (/^gs[1-4]$/.test(subject)) {
+            return paper === subject;
         }
 
-        if (subject === "gs2") {
-            return paper === "gs2";
-        }
-
-        if (subject === "gs3") {
-            return paper === "gs3";
-        }
-
-        if (subject === "gs4") {
-            return paper === "gs4";
-        }
-
+        // All GS papers
         if (subject === "gs-all") {
-            return paper.startsWith("gs");
+            return /^gs[1-4]$/.test(paper);
         }
 
-        // All other papers – exact match
-        return paper === subject.toLowerCase();
+        // Any other paper – exact match
+        return paper === subject;
     });
 
-if (eligible.length === 0) {
-    alert("No questions found for the selected subject.");
-    return;
-}
+    // -----------------------------
+    // No questions found
+    // -----------------------------
+    if (eligible.length === 0) {
+        alert("No questions found for the selected subject.");
 
-  // Prefer questions that are not already selected.
-  const unselected = eligible.filter(q => !selectionMap.get(q._selectionId));
-  if (unselected.length >= count) {
-    eligible = unselected;
-  } else if (eligible.length < count) {
-    alert(`Only ${eligible.length} eligible questions are available.`);
-    return;
-  }
+        console.warn("Random question search:", {
+            requestedSubject: subject,
+            availablePapers: [
+                ...new Set(
+                    repository.map(q =>
+                        String(q?.gs_paper || "").trim()
+                    ).filter(Boolean)
+                )
+            ]
+        });
 
-  // Fisher-Yates shuffle.
-  for (let i = eligible.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [eligible[i], eligible[j]] = [eligible[j], eligible[i]];
-  }
+        return;
+    }
 
-  const selected = eligible.slice(0, count);
+    // -----------------------------
+    // Prefer unselected questions
+    // -----------------------------
+    const unselected = eligible.filter(q =>
+        !selectionMap.get(q._selectionId)
+    );
 
-  // Sort ascending by marks: 10, 15, 20, 125, etc.
-  selected.sort((a, b) => Number(a.marks || 0) - Number(b.marks || 0));
+    if (unselected.length >= count) {
+        eligible = unselected;
+    } else if (eligible.length < count) {
+        alert(
+            `Only ${eligible.length} eligible questions are available.`
+        );
+        return;
+    }
+    // If there aren't enough unselected questions,
+    // but there are enough total questions, use all eligible ones.
+    else {
+        eligible = eligible.slice();
+    }
 
-  selected.forEach(q => selectionMap.set(q._selectionId, true));
+    // -----------------------------
+    // Fisher-Yates shuffle
+    // -----------------------------
+    for (let i = eligible.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
 
-  // Populate the generated questions in the existing table.
-  tbody.innerHTML = "";
-  buildTableRows(selected);
-  updateSummary();
+        [eligible[i], eligible[j]] =
+            [eligible[j], eligible[i]];
+    }
 
-  const panel = document.getElementById("randomQuestionPanel");
-  if (panel) panel.style.display = "none";
+    // -----------------------------
+    // Select requested number
+    // -----------------------------
+    const selected = eligible.slice(0, count);
+
+    // -----------------------------
+    // Sort by marks
+    // -----------------------------
+    selected.sort((a, b) => {
+        return Number(a?.marks || 0) -
+               Number(b?.marks || 0);
+    });
+
+    // -----------------------------
+    // Mark as selected
+    // -----------------------------
+    selected.forEach(q => {
+        if (q._selectionId) {
+            selectionMap.set(q._selectionId, true);
+        }
+    });
+
+    // -----------------------------
+    // Populate table
+    // -----------------------------
+    if (tbody) {
+        tbody.innerHTML = "";
+        buildTableRows(selected);
+    }
+
+    updateSummary();
+
+    // -----------------------------
+    // Close random panel
+    // -----------------------------
+    const panel = document.getElementById("randomQuestionPanel");
+
+    if (panel) {
+        panel.style.display = "none";
+    }
 }
 
 // populate syllabus select keeping master syllabus order and only topics that are used by questions for that GS
