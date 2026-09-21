@@ -299,23 +299,28 @@ function generateRandomQuestions() {
     return;
   }
 
-  let eligible = questionsRepo.questions_repository.filter(q => {
-    const paper = String(q.gs_paper || "").trim();
-    const paperLower = paper.toLowerCase();
+let eligible = questionsRepo.questions_repository.filter(q => {
+
+    const paper = String(q.gs_paper || "").trim().toLowerCase();
+    const questionId = String(q.question_id || "").trim();
 
     if (subject === "essay") {
-        return paperLower === "essay";
+        return paper === "essay";
     }
 
     if (subject === "gs") {
-        return paperLower.startsWith("gs");
+        return paper.startsWith("gs");
     }
 
     if (subject === "sociology") {
-        return paperLower.startsWith("Socio");
+        return /^soc[12]_/i.test(questionId);
     }
 
-    return paper === gsPaper;
+    if (subject === "gs-paper") {
+        return paper === gsPaper.toLowerCase();
+    }
+
+    return false;
 });
 
   if (eligible.length === 0) {
