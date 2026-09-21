@@ -312,7 +312,7 @@ function generateRandomQuestions() {
     }
 
     if (subject === "sociology") {
-        return paperLower.startsWith("sociology");
+        return paperLower.startsWith("Socio");
     }
 
     return paper === gsPaper;
