@@ -231,58 +231,109 @@ document
 
 // ---------------------- Random question logic ----------------------
 function setupRandomButton() {
-  const randomBtn = document.getElementById("randomBtn");
-  if (!randomBtn) return;
+    const randomBtn = document.getElementById("randomBtn");
+    if (!randomBtn) return;
 
-  randomBtn.onclick = () => {
-    const panel = document.getElementById("randomQuestionPanel");
-    if (!panel) return;
+    randomBtn.onclick = () => {
+        const panel = document.getElementById("randomQuestionPanel");
+        if (!panel) return;
 
-    populateRandomGsPaperOptions();
-    panel.style.display = panel.style.display === "none" ? "block" : "none";
-  };
+        populateRandomSubjectOptions();
 
-  const subjectSelect = document.getElementById("randomSubject");
-  if (subjectSelect) {
-    subjectSelect.onchange = () => {
-      const gsSelect = document.getElementById("randomGsPaper");
-      if (!gsSelect) return;
-      gsSelect.style.display = subjectSelect.value === "gs-paper" ? "inline-block" : "none";
+        panel.style.display =
+            panel.style.display === "none"
+                ? "block"
+                : "none";
     };
-  }
 
-  const generateBtn = document.getElementById("generateRandomQuestions");
-  if (generateBtn) generateBtn.onclick = generateRandomQuestions;
+    const generateBtn =
+        document.getElementById("generateRandomQuestions");
+
+    if (generateBtn) {
+        generateBtn.onclick = generateRandomQuestions;
+    }
 }
 
-function populateRandomGsPaperOptions() {
-  const gsSelect = document.getElementById("randomGsPaper");
-  if (!gsSelect) return;
+function populateRandomSubjectOptions() {
 
-  const currentValue = gsSelect.value;
-  gsSelect.innerHTML = "<option value=\"\">-- Select GS Paper --</option>";
+    const subjectSelect =
+        document.getElementById("randomSubject");
 
-  const gsPapers = Array.from(
-    new Set(
-      questionsRepo.questions_repository
-        .map(q => q.gs_paper)
-        .filter(g => g && String(g).trim().toLowerCase())
-    )
-  );
+    if (!subjectSelect) return;
 
-  gsPapers.forEach(g => gsSelect.add(new Option(g, g)));
+    const currentValue = subjectSelect.value;
 
-  if (gsPapers.includes(currentValue)) gsSelect.value = currentValue;
+    subjectSelect.innerHTML =
+        '<option value="">-- Select Subject --</option>';
+
+    // Fixed options – always at the top
+    subjectSelect.add(
+        new Option("Essay", "essay")
+    );
+
+    subjectSelect.add(
+        new Option("GS1", "GS1")
+    );
+
+    subjectSelect.add(
+        new Option("GS2", "GS2")
+    );
+
+    subjectSelect.add(
+        new Option("GS3", "GS3")
+    );
+
+    subjectSelect.add(
+        new Option("GS4", "GS4")
+    );
+
+    subjectSelect.add(
+        new Option("GS (all)", "gs-all")
+    );
+
+    // Get all actual papers from the JSON
+    const papers = Array.from(
+        new Set(
+            questionsRepo.questions_repository
+                .map(q => String(q.gs_paper || "").trim())
+                .filter(Boolean)
+        )
+    );
+
+    // Add everything else from the JSON
+    papers.forEach(paper => {
+
+        const lower = paper.toLowerCase();
+
+        // Already represented by the fixed options above
+        if (lower === "essay") return;
+        if (/^gs[1-4]$/i.test(paper)) return;
+
+        subjectSelect.add(
+            new Option(paper, paper)
+        );
+    });
+
+    // Restore previous selection if it still exists
+    if (
+        Array.from(subjectSelect.options)
+            .some(option => option.value === currentValue)
+    ) {
+        subjectSelect.value = currentValue;
+    }
 }
 
 function generateRandomQuestions() {
   const countInput = document.getElementById("randomQuestionCount");
-  const subjectSelect = document.getElementById("randomSubject");
-  const gsSelect = document.getElementById("randomGsPaper");
 
-  const count = Math.floor(Number(countInput?.value));
-  const subject = subjectSelect?.value || "";
-  const gsPaper = gsSelect?.value || "";
+  const subjectSelect =
+    document.getElementById("randomSubject");
+
+const count =
+    Math.floor(Number(countInput?.value));
+
+const subject =
+    subjectSelect?.value || "";
 
   if (!Number.isFinite(count) || count < 1) {
     alert("Enter a valid number of questions.");
@@ -294,36 +345,42 @@ function generateRandomQuestions() {
     return;
   }
 
-  if (subject === "gs-paper" && !gsPaper) {
-    alert("Select a GS Paper.");
-    return;
-  }
 
+let eligible =
+    questionsRepo.questions_repository.filter(q => {
 
-  
-let eligible = questionsRepo.questions_repository.filter(q => {
+        const paper =
+            String(q.gs_paper || "")
+                .trim()
+                .toLowerCase();
 
-    const paper = String(q.gs_paper || "").trim().toLowerCase();
-    const questionId = String(q.question_id || "").trim().toLowerCase();
+        if (subject === "essay") {
+            return paper === "essay";
+        }
 
-    if (subject === "essay") {
-        return paper === "essay";
-    }
+        if (subject === "gs1") {
+            return paper === "gs1";
+        }
 
-    if (subject === "gs") {
-        return paper.startsWith("gs");
-    }
+        if (subject === "gs2") {
+            return paper === "gs2";
+        }
 
-    if (subject === "sociology") {
-        return questionId.startsWith("soc");
-    }
+        if (subject === "gs3") {
+            return paper === "gs3";
+        }
 
-    if (subject === "gs-paper") {
-        return paper === gsPaper.toLowerCase();
-    }
+        if (subject === "gs4") {
+            return paper === "gs4";
+        }
 
-    return false;
-});
+        if (subject === "gs-all") {
+            return paper.startsWith("gs");
+        }
+
+        // All other papers – exact match
+        return paper === subject.toLowerCase();
+    });
 
 if (eligible.length === 0) {
     alert("No questions found for the selected subject.");
