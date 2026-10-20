@@ -7,139 +7,194 @@
 <meta name="description" content="Generate and download your own customized UPSC Civil Services Examination (CSE) Mains Previous Year Questions (PYQ) Question-cum-Answer Booklet (QCAB) PDF for free. Select questions based on year, General Studies (GS) paper, or syllabus topic to create a personalized practice booklet.">
 <meta name="keywords" content="UPSC, CSE, Mains, PYQ, QCAB, PDF, GS1, GS2, GS3, GS4, 2025, 2024, 2023, 2022, Previous Year Questions, Question Paper, Answer Booklet, GS Paper, General Studies, Syllabus, Download, Free, Mock Test, Practice Paper, Civil Services, Exam Preparation, UPSC Mains Practice">
 <meta name="author" content="Anand Kumar Verma">
+
 <title>Download UPSC Mains PYQ QCAB PDF</title>
 <link rel="stylesheet" href="style.css">
+
+<link
+  rel="icon"
+  type="image/svg+xml"
+  href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext x='50%25' y='.9em' font-size='90' text-anchor='middle' fill='white'%3EQ%3C/text%3E%3C/svg%3E"
+/>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
-    <div class="main-content">
 
-        <h3>UPSC Mains PYQ QCAB Generator</h3>
-        <div class="filter-mode">
-            <label><input type="radio" name="mode" value="year-gs" checked> Year + GS Paper</label>
-            <label><input type="radio" name="mode" value="gs-syllabus"> GS Paper + Syllabus Topic</label>
+<header class="app-header">
+    <h1>UPSC Mains PYQ QCAB Generator</h1>
+    <p>Build a custom question-cum-answer booklet from previous year questions.</p>
+</header>
+
+<main class="main-content">
+
+    <!-- ===================== 1. BUILD YOUR SET ===================== -->
+    <section class="card builder">
+
+        <div class="tabs" role="tablist">
+            <button type="button" class="tab active" data-mode="year-gs" role="tab">Year + Paper</button>
+            <button type="button" class="tab" data-mode="gs-syllabus" role="tab">Paper + Syllabus topic</button>
         </div>
 
-        <div id="filters"></div>
+        <!-- Year + Paper -->
+        <div id="modeYearGs" class="mode-panel">
 
-        <!-- Random question configuration -->
-        <div id="randomQuestionPanel" style="display:none; margin:15px 0;">
-            <label>
-                Number of Questions
+            <div class="chip-group">
+                <div class="chip-head">
+                    <span class="chip-title">Years</span>
+                    <span class="mini-links">
+                        <button type="button" class="link" id="yearsAll">All</button>
+                        <button type="button" class="link" id="yearsClear">Clear</button>
+                    </span>
+                </div>
+                <div id="yearChips" class="chips"></div>
+            </div>
+
+            <div class="chip-group">
+                <div class="chip-head">
+                    <span class="chip-title">Papers</span>
+                    <span class="mini-links">
+                        <button type="button" class="link" id="papersAll">All</button>
+                        <button type="button" class="link" id="papersClear">Clear</button>
+                    </span>
+                </div>
+                <div id="paperChips" class="chips"></div>
+            </div>
+
+            <div class="builder-foot">
+                <span id="matchInfo" class="muted">Pick at least one year or paper.</span>
+                <button type="button" id="addSetBtn" class="btn primary" disabled>Add to list</button>
+            </div>
+
+            <p class="hint">
+                Want different combinations, such as 2014&nbsp;GS1 together with 2017&nbsp;GS4?
+                Pick one combination, press <b>Add to list</b>, then pick the next one and add it too.
+                Every added set stays in the list below.
+            </p>
+        </div>
+
+        <!-- Paper + Syllabus -->
+        <div id="modeSyllabus" class="mode-panel" hidden>
+            <div class="syllabus-row">
+                <select id="gsPaperFilter2">
+                    <option value="">-- Select GS Paper --</option>
+                </select>
+
+                <select id="syllabusFilter">
+                    <option value="">-- Select Syllabus Topic --</option>
+                </select>
+
+                <button type="button" id="addSyllabusSetBtn" class="btn primary" disabled>Add to list</button>
+            </div>
+            <div id="syllabusMatchInfo" class="muted">Pick a GS paper (and optionally a topic).</div>
+            <p class="hint">You can add several papers or topics one after another. Each stays in the list.</p>
+        </div>
+
+        <!-- Added sets -->
+        <div id="batchList" class="batch-list" hidden></div>
+
+        <!-- Extra ways to add questions -->
+        <div class="extras">
+            <button type="button" id="addCustomBtn" class="btn ghost">+ Add your own</button>
+            <button type="button" id="randomBtn" class="btn ghost">Random</button>
+            <button type="button" id="importMarkdown" class="btn ghost">Import .md</button>
+            <input type="file" id="importMarkdownFile" accept=".md,text/markdown" style="display:none;">
+        </div>
+
+        <!-- Random panel -->
+        <div id="randomQuestionPanel" class="sub-panel" hidden>
+            <label>Number of questions
                 <input type="number" id="randomQuestionCount" min="1" value="10">
             </label>
 
-            <label>
-                Subject
+            <label>Pick from
+                <select id="randomSubject">
+                    <option value="">All questions in list (0)</option>
+                </select>
+            </label>
 
-<label>
-    Subject
-    <select id="randomSubject">
-        <option value="">-- Select Subject --</option>
-
-        <option value="essay">Essay</option>
-        <option value="GS1">GS1</option>
-        <option value="GS2">GS2</option>
-        <option value="GS3">GS3</option>
-        <option value="GS4">GS4</option>
-        <option value="gs-all">GS (all)</option>
-
-        <option value="Sociology-I">Sociology-I</option>
-        <option value="Sociology-II">Sociology-II</option>
-    </select>
-</label>
-
-            <button id="generateRandomQuestions" type="button">
-                Generate Random
-            </button>
+            <button type="button" id="generateRandomQuestions" class="btn primary">Pick random</button>
         </div>
 
-<div id="customQuestionPanel" style="display:none; margin:15px 0;">
-
-
-    <label>
-        10 Markers
-        <input type="number" id="custom10" min="0" value="0">
-    </label>
-
-    <label>
-        15 Markers
-        <input type="number" id="custom15" min="0" value="0">
-    </label>
-
-    <label>
-        20 Markers
-        <input type="number" id="custom20" min="0" value="0">
-    </label>
-
-    <button id="addCustomQuestions">
-        Add Questions
-    </button>
-
-   <input
-    type="file"
-    id="importMarkdownFile"
-    accept=".md,text/markdown"
-    style="display:none;">
-
-        <button id="importMarkdown">
-    Import .md
-    </button>
-
-</div>
-
-
- 
-
-        <div id="selectedSummary" style="margin-bottom:10px; display:none;">
-            Selected Questions: <span id="selectedCount">0</span>, Total Marks: <span id="totalMarks">0</span>,
-            10-mark: <span id="count10">0</span>, 15-mark: <span id="count15">0</span>
+        <!-- Custom panel -->
+        <div id="customQuestionPanel" class="sub-panel" hidden>
+            <label>10 markers
+                <input type="number" id="custom10" min="0" value="0">
+            </label>
+            <label>15 markers
+                <input type="number" id="custom15" min="0" value="0">
+            </label>
+            <label>20 markers
+                <input type="number" id="custom20" min="0" value="0">
+            </label>
+            <button type="button" id="addCustomQuestions" class="btn primary">Add blank questions</button>
         </div>
 
-        <table id="questionsTable">
-            <thead>
-                <tr>
-                    <th><input type="checkbox" id="selectAll"></th>
-                    <th>Year</th>
-                    <th>GS Paper</th>
-                    <th>Question Text</th>
-                    <th>Marks</th>
-                    <th>Word Limit</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        </table>
+        <div id="statusMsg" class="status" aria-live="polite"></div>
+    </section>
 
-<div class="buttons">
-    <button id="generateQCAB">
-        Generate and Download QCAB PDF
-    </button>
 
-    <button id="downloadPDF" style="display:none;">
-        Download QCAB PDF
-    </button>
+    <!-- ===================== 2. DOWNLOAD + QUESTIONS ===================== -->
+    <section class="card results">
 
-    <button id="downloadQuestions">
-        Download Questions only
-    </button>
+        <div class="toolbar">
 
-    <button id="downloadAnswersBooklet">
-        Download Answers Booklet only
-    </button>
+            <div id="selectedSummary" class="summary">
+                <span class="stat"><b id="selectedCount">0</b> selected</span>
+                <span class="stat"><b id="totalMarks">0</b> marks</span>
+                <span class="stat"><b id="count10">0</b> × 10M</span>
+                <span class="stat"><b id="count15">0</b> × 15M</span>
+            </div>
 
-    <div class="secondary-buttons">
-        <button id="exportMarkdown">
-            Export as .md
-        </button>
+            <div class="actions">
+                <button type="button" id="generateQCAB" class="btn primary">
+                    Generate and Download QCAB PDF
+                </button>
 
-        <button id="resetQuestions">
-            Reset All Questions
-        </button>
-    </div>
-</div>
+                <button type="button" id="downloadPDF" class="btn" style="display:none;">
+                    Download QCAB PDF
+                </button>
 
-    </div>
+                <button type="button" id="downloadQuestions" class="btn">
+                    Questions only
+                </button>
 
+                <button type="button" id="downloadAnswersBooklet" class="btn">
+                    Answers Booklet only
+                </button>
+
+                <button type="button" id="exportMarkdown" class="btn ghost">
+                    Export .md
+                </button>
+
+                <button type="button" id="resetQuestions" class="btn ghost danger">
+                    Reset all
+                </button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table id="questionsTable">
+                <thead>
+                    <tr>
+                        <th><input type="checkbox" id="selectAll" title="Select / deselect all"></th>
+                        <th>Year</th>
+                        <th>GS Paper</th>
+                        <th>Question Text</th>
+                        <th>Marks</th>
+                        <th>Word Limit</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+
+            <div id="emptyState" class="empty">
+                No questions yet. Choose years and papers above and press <b>Add to list</b>.
+            </div>
+        </div>
+    </section>
+
+</main>
 
 <script src="js/populateQuestions.js"></script>
 <script src="js/generatePDF.js"></script>

@@ -1,100 +1,69 @@
 // generatePDF.js
+// QCAB / Questions / Answer Booklet generator (UPSC style)
+//
+// Questions are grouped per paper (year + gs_paper). Each paper is
+// rendered on its own terms:
+//   - Essay paper  -> Section A (Q1-Q4) / Section B (Q5-Q8) layout
+//   - Any other    -> normal layout
+// So Essay can now be mixed with GS1, Socio-I, etc.
 
-
-
-document.getElementById("generateQCAB").addEventListener("click", () => {
-    if (typeof window.getSelectedQuestions !== "function") {
-        alert("Selection logic not loaded!");
-        return;
-    }
-
-    const selectedQuestions = window.getSelectedQuestions();
-    if (selectedQuestions.length === 0) {
-        alert("Select questions first!");
-        return;
-    }
-
-    // Sort by marks if you still want that order, else comment next line
-    selectedQuestions.sort((a, b) => a.marks - b.marks);
-
-    // Ensure sequential numbering (1,2,3...)
-// Use the question number embedded in question_id.
-// This allows sub-parts such as Q02(a) and Q02(b)
-// to retain the same question number.
-selectedQuestions.forEach((q) => {
-    const match = q.question_id?.match(/_Q(\d+)$/);
-
-    if (match) {
-        q.question_number = Number(match[1]);
-    } else {
-        // Fallback for custom questions or IDs without _Q<number>
-        q.question_number = selectedQuestions.indexOf(q) + 1;
-    }
-
-    console.log(
-        "Question ID:", q.question_id,
-        "→ Question No:", q.question_number
-    );
-});
-
-
-
-     window.footerPrefix = "";
-     
-     const intelligentName =
-    getIntelligentFilename(selectedQuestions, "qcab");
-
-if (intelligentName) {
-
-    window.footerPrefix =
-        `${selectedQuestions[0].year}_${selectedQuestions[0].gs_paper}`;
-
-    window.pdfFileName = intelligentName;
-
-} else {
-
-    const footerName = prompt(
-        "Enter footer filename.\n\nExamples:\n2026-07-21_\n2022_GS1_\n2025_PSIR_\nSeries_1234\nModule_1234_\n\nLeave blank for only Questions as prefix.",
-        window.currentSourceFileName
-    );
-
-    if (footerName === null) return;
-
-    window.footerPrefix =
-        footerName.trim() ||
-        window.currentSourceFileName;
-
-    window.pdfFileName =
-        `${footerName.trim() || window.currentSourceFileName || `${yyyy}-${mm}-${dd}-QCAB`}.pdf`;
-}
-
-generateQCABPDF(selectedQuestions, "qcab");
-
-});
+// ---------------------------------------------------------
+// CONSTANTS
+// ---------------------------------------------------------
 
 const today = new Date();
-
 const yyyy = today.getFullYear();
 const mm = String(today.getMonth() + 1).padStart(2, "0");
 const dd = String(today.getDate()).padStart(2, "0");
 
+const PAGE = {
+    width: 210,
+    height: 297,
+    left: 15,
+    right: 188,
+    top: 15,
+    bottom: 282,
+    lineHeight: 6
+};
+
+const NUMBER_WIDTH = 10;
+const TEXT_X = PAGE.left + NUMBER_WIDTH;
+const TEXT_WIDTH = PAGE.right - TEXT_X;
+
+const MARGIN_NOTE = "Candidates must not write on this margin";
+
+const ESSAY_INSTRUCTION =
+    "Write two essays, choosing one topic from each of the following Sections A and B, in about 1000-1200 words each:";
+
+
+// ---------------------------------------------------------
+// SELECTION / NAMING HELPERS
+// ---------------------------------------------------------
+
+function getSelection() {
+    if (typeof window.getSelectedQuestions !== "function") {
+        alert("Selection logic not loaded!");
+        return null;
+    }
+
+    const selected = window.getSelectedQuestions();
+
+    if (selected.length === 0) {
+        alert("Select questions first!");
+        return null;
+    }
+
+    return selected;
+}
 
 function getIntelligentFilename(questions, type) {
 
     const years = [
-        ...new Set(
-            questions
-                .map(q => q.year)
-                .filter(Boolean)
-        )
+        ...new Set(questions.map(q => q.year).filter(Boolean))
     ];
 
     const subjects = [
-        ...new Set(
-            questions
-                .map(q => q.gs_paper)
-                .filter(Boolean)
-        )
+        ...new Set(questions.map(q => q.gs_paper).filter(Boolean))
     ];
 
     // Automatic naming when exactly one year
@@ -104,1112 +73,651 @@ function getIntelligentFilename(questions, type) {
         const year = String(years[0]).trim();
         const subject = String(subjects[0]).trim();
 
-        if (type === "qcab") {
-            return `${year}_${subject}_QCAB.pdf`;
-        }
-
-        if (type === "questions") {
-            return `${year}_${subject}_Questions.pdf`;
-        }
-
-        if (type === "answers") {
-            return `${year}_${subject}_Answers_Booklet.pdf`;
-        }
-
-        if (type === "md") {
-            return `${year}_${subject}.md`;
-        }
+        if (type === "qcab") return `${year}_${subject}_QCAB.pdf`;
+        if (type === "questions") return `${year}_${subject}_Questions.pdf`;
+        if (type === "answers") return `${year}_${subject}_Answers_Booklet.pdf`;
+        if (type === "md") return `${year}_${subject}.md`;
     }
 
     return null;
 }
 
+// Sets window.footerPrefix and window.pdfFileName.
+// Returns false if the user cancelled the prompt.
+function resolveNaming(questions, type) {
 
-function generateQCABPDF(questions, mode = "qcab", keepBlankFirstPage = false) {
-const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-    const pageHeight = 297, pageWidth = 210;
-    const leftMargin = 15, rightMargin = 188, topMargin = 15, bottomMargin = 282;
+    const intelligentName = getIntelligentFilename(questions, type);
 
-const isEssayPaper = questions.some(q => q.gs_paper === "Essay");
+    if (intelligentName) {
+        window.footerPrefix =
+            `${questions[0].year}_${questions[0].gs_paper}`;
+        window.pdfFileName = intelligentName;
+        return true;
+    }
 
-    doc.setFont("Times", "Roman");
-    doc.setFontSize(12);
+    const isMixed =
+        new Set(questions.map(q => `${q.year || ""}|${q.gs_paper || ""}`)).size > 1;
 
-let questionPages = 1;
-let currentY = topMargin;
+    let message;
 
-const numberWidth = 10;
-const textX = leftMargin + numberWidth;
-const textWidth = rightMargin - textX;
-const lineHeight = 6;
+    if (type === "qcab") {
+        message =
+            "Enter footer filename.\n\nExamples:\n2026-07-21_\n2022_GS1_\n2025_PSIR_\nSeries_1234\nModule_1234_\n\nLeave blank for only Questions as prefix.";
+    } else {
+        message = "Enter filename prefix:";
+    }
+
+    if (isMixed) {
+        message =
+            "Multiple papers selected.\nEnter a filename for the combined PDF:\n\n" +
+            "(Each paper's footer will automatically show YYYY_Paper.)";
+    }
+
+    const footerName = prompt(message, window.currentSourceFileName || "");
+
+    if (footerName === null) return false;
+
+    const cleaned = footerName.trim();
+
+    window.footerPrefix = cleaned || window.currentSourceFileName || "";
+
+    if (type === "qcab") {
+        window.pdfFileName =
+            `${cleaned || window.currentSourceFileName || `${yyyy}-${mm}-${dd}-QCAB`}.pdf`;
+    } else if (type === "questions") {
+        window.pdfFileName =
+            `${cleaned || window.currentSourceFileName || "Questions"}_Questions.pdf`;
+    } else {
+        window.pdfFileName =
+            `${cleaned || window.currentSourceFileName || "Answers"}_Answers_Booklet.pdf`;
+    }
+
+    // If every question belongs to the same year, prefix the file
+    // name with "YYYY-" (unless it already starts with that year).
+    const allYears = new Set(questions.map(q => String(q.year || "").trim()));
+
+    if (allYears.size === 1) {
+        const commonYear = [...allYears][0];
+
+        if (commonYear && !window.pdfFileName.startsWith(commonYear)) {
+            window.pdfFileName = `${commonYear}-${window.pdfFileName}`;
+        }
+    }
+
+    return true;
+}
 
 
-if (isEssayPaper) {
+// ---------------------------------------------------------
+// GROUPING (one group per year + paper)
+// ---------------------------------------------------------
 
-    // Essay paper: Q1-Q4 = Section A
-    // Q5-Q8 = Section B
+function getQuestionNumber(q, fallback) {
+    // Use the question number embedded in question_id.
+    // Sub-parts such as Q02(a) and Q02(b) keep the same number.
+    const match = q.question_id?.match(/_Q(\d+)/);
+    return match ? Number(match[1]) : fallback;
+}
 
-    const sectionA = questions
-        .filter(q => q.question_number >= 1 && q.question_number <= 4)
-        .sort((a, b) => a.question_number - b.question_number);
+function groupByPaper(questions) {
 
-    const sectionB = questions
-        .filter(q => q.question_number >= 5 && q.question_number <= 8)
-        .sort((a, b) => a.question_number - b.question_number);
+    const map = new Map();
 
-    // Heading / instruction
-    doc.setFont("Times", "Roman");
-    doc.setFontSize(12);
+    // Groups keep the order in which papers first appear in the selection.
+    questions.forEach(q => {
+        const key = `${q.year || ""}|${q.gs_paper || ""}`;
 
-    const instruction =
-        "Write two essays, choosing one topic from each of the following Sections A and B, in about 1000-1200 words each:";
-
-    const instructionLines =
-        doc.splitTextToSize(instruction, textWidth);
-
-    doc.text(instructionLines, leftMargin, currentY);
-
-    currentY += instructionLines.length * lineHeight + 6;
-
-    // ---------- SECTION A ----------
-
-    doc.text("Section A", leftMargin, currentY);
-    currentY += lineHeight + 2;
-
-    sectionA.forEach(q => {
-
-        const qText = `${q.question_number}. ${q.question_text}`;
-
-        const splitText =
-            doc.splitTextToSize(qText, textWidth);
-
-        doc.text(splitText, leftMargin, currentY);
-
-        currentY += splitText.length * lineHeight + 4;
-    });
-
-    currentY += 4;
-
-    // ---------- SECTION B ----------
-
-    doc.text("Section B", leftMargin, currentY);
-    currentY += lineHeight + 2;
-
-    sectionB.forEach(q => {
-
-        const qText = `${q.question_number}. ${q.question_text}`;
-
-        const splitText =
-            doc.splitTextToSize(qText, textWidth);
-
-        doc.text(splitText, leftMargin, currentY);
-
-        currentY += splitText.length * lineHeight + 4;
-    });
-
-} else {
-    questions.forEach((q, index) => {
-        // Format question text
-        const qHeader = `${q.question_number}. `;
-        const qText = `${q.question_text}   [${q.marks} M]`;
-        console.log( "Questions:",qHeader,"----", qText);
-        // Split text to fit within width
-const splitText = doc.splitTextToSize(qText, textWidth);
-        const totalHeight = splitText.length * lineHeight + lineHeight;
-
-        // Add new page if content exceeds bottom margin
-        if (currentY + totalHeight > pageHeight - 15) {
-            doc.addPage();
-            questionPages++;
-            currentY = topMargin;
+        if (!map.has(key)) {
+            map.set(key, {
+                year: q.year || "",
+                paper: q.gs_paper || "",
+                questions: []
+            });
         }
 
-        // Draw question number and text
-doc.text(qHeader, leftMargin, currentY);
-doc.text(splitText, textX, currentY);
-
-
-// Footer
-doc.setFontSize(8);
-
-if (window.footerPrefix) {
-    doc.text(
-        window.footerPrefix,
-        leftMargin - 14,
-        bottomMargin + 3
-    );
-}
-
-
- doc.setFontSize(12);
-
-        // Update Y position
-        currentY += totalHeight; // spacing between questions
+        map.get(key).questions.push(q);
     });
+
+    const groups = [...map.values()];
+
+    groups.forEach(group => {
+
+        group.isEssay = group.paper === "Essay";
+
+        // Display label  -> 2014-Essay
+        group.label = [group.year, group.paper].filter(Boolean).join("-");
+
+        // Footer prefix  -> 2014_Essay
+        group.prefix = [group.year, group.paper].filter(Boolean).join("_");
+
+        // Same ordering as before (by marks) inside each paper
+        group.questions.sort((a, b) => a.marks - b.marks);
+
+        group.questions.forEach((q, i) => {
+            q.question_number = getQuestionNumber(q, i + 1);
+        });
+
+        // Essay is always in question-number order
+        if (group.isEssay) {
+            group.questions.sort(
+                (a, b) => a.question_number - b.question_number
+            );
+        }
+    });
+
+    return groups;
 }
- 
+
+function footerPrefixFor(group, isMulti) {
+    // Several papers: each paper uses its own YYYY_Paper
+    if (isMulti && group.prefix) return group.prefix;
+
+    // Single paper: keep the old behaviour (user-entered prefix wins)
+    return window.footerPrefix || group.prefix || "";
+}
+
+function answerFooterText(q, prefix) {
+    return prefix
+        ? q.question_id.replace(/^.*(?=_Q)/, prefix)
+        : q.question_id.replace(/^.*_/, "");
+}
+
 
 // ---------------------------------------------------------
-// INTENTIONALLY BLANK PAGE BEFORE ANSWER BOOKLET
+// MAIN GENERATOR
 // ---------------------------------------------------------
 
-if (mode === "qcab") {
+function generateQCABPDF(questions, mode = "qcab", keepBlankFirstPage = false) {
 
-    // Essay always gets an intentional blank page.
-    // Normal GS papers get one only when the question
-    // section has an even number of pages.
-    if (isEssayPaper || questionPages % 2 === 0) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "mm", format: "a4" });
 
-        doc.addPage();
+    const lineHeight = PAGE.lineHeight;
 
-        doc.setFont("Times", "Italic");
+    const groups = groupByPaper(questions);
+    const isMulti = groups.length > 1;
+
+    doc.setFont("Times", "normal");
+    doc.setFontSize(12);
+
+    // -----------------------------------------------------
+    // Page management (jsPDF starts with one page already)
+    // -----------------------------------------------------
+
+    let firstPageUsed = false;
+
+    const startPage = () => {
+        if (firstPageUsed) doc.addPage();
+        firstPageUsed = true;
+    };
+
+    const pagesSoFar = () => (firstPageUsed ? doc.getNumberOfPages() : 0);
+
+    const drawBlankPage = () => {
+        startPage();
+
+        doc.setFont("Times", "italic");
         doc.setFontSize(10);
 
         doc.text(
             "Intentionally left blank",
-            pageWidth - 15,
-            pageHeight - 10,
+            PAGE.width - 15,
+            PAGE.height - 10,
             { align: "right" }
         );
 
-        // Restore default font
-        doc.setFont("Times", "Roman");
+        doc.setFont("Times", "normal");
         doc.setFontSize(12);
-    }
-}
+    };
 
-// ---------- PART 2: Render QCAB Pages ----------
+    // -----------------------------------------------------
+    // QUESTION PAGES
+    // -----------------------------------------------------
 
-if (mode !== "questions") {
+    const qState = { y: PAGE.top, open: false, footer: "" };
 
-let answerPage = 1;
+    // Footer tags per question page (a page can hold several papers
+    // in the Questions-only PDF). Drawn once at the end.
+    const pageTags = new Map();
 
-if (mode === "answers" && keepBlankFirstPage) {
+    const addTag = (text) => {
+        if (!text) return;
+        const page = doc.getNumberOfPages();
+        if (!pageTags.has(page)) pageTags.set(page, []);
+        if (!pageTags.get(page).includes(text)) pageTags.get(page).push(text);
+    };
 
-    doc.addPage();
+    const openQuestionPage = () => {
+        startPage();
+        qState.open = true;
+        qState.y = PAGE.top;
 
-    // Completely blank page.
-    // Do not add footer, numbering, or "Intentionally left blank".
-}
+        addTag(qState.footer);
 
-if (isEssayPaper) {
+        doc.setFont("Times", "normal");
+        doc.setFontSize(12);
+    };
 
-    const sectionA = questions
-        .filter(q => q.question_number >= 1 && q.question_number <= 4)
-        .sort((a, b) => a.question_number - b.question_number);
+    const ensureSpace = (height) => {
+        if (qState.y + height > PAGE.height - 15) {
+            openQuestionPage();
+        }
+    };
 
-    const sectionB = questions
-        .filter(q => q.question_number >= 5 && q.question_number <= 8)
-        .sort((a, b) => a.question_number - b.question_number);
+    // Paper name placed ABOVE Q1 (in the top margin),
+    // so Q1 itself stays exactly where it was.
+    const drawPaperLabelAbove = (label) => {
+        if (!label) return;
 
+        doc.setFont("Times", "bold");
+        doc.setFontSize(10);
+        doc.text(label, PAGE.left, PAGE.top - 6);
 
-    // =====================================================
-    // SECTION A – 12 PAGES
-    // =====================================================
+        doc.setFont("Times", "normal");
+        doc.setFontSize(12);
+    };
 
-    for (let p = 0; p < 12; p++) {
+    const firstQuestionHeight = (group) => {
+        const q = group.questions[0];
+        if (!q) return lineHeight;
 
-        doc.addPage();
-
-        // Margins
-        doc.setLineWidth(0.3);
-
-        doc.line(
-            leftMargin,
-            topMargin,
-            leftMargin,
-            bottomMargin
+        const lines = doc.splitTextToSize(
+            `${q.question_text}   [${q.marks} M]`,
+            TEXT_WIDTH
         );
 
-        doc.line(
-            rightMargin,
-            topMargin,
-            rightMargin,
-            bottomMargin
+        return lines.length * lineHeight + lineHeight;
+    };
+
+    const renderEssayQuestions = (group) => {
+
+        const sectionA = group.questions.filter(
+            q => q.question_number >= 1 && q.question_number <= 4
         );
 
-        // Footer
-        const footerText =
-            window.footerPrefix
-                ? "Section A"
-                : "Section A";
-
-        doc.setFontSize(8);
-
-        doc.text(
-            footerText,
-            leftMargin - 14,
-            bottomMargin + 3
+        const sectionB = group.questions.filter(
+            q => q.question_number >= 5 && q.question_number <= 8
         );
 
-        doc.text(
-            String(answerPage),
-            pageWidth / 2,
-            bottomMargin + 3,
-            { align: "center" }
-        );
+        doc.setFont("Times", "normal");
+        doc.setFontSize(12);
 
-        answerPage++;
+        const instructionLines =
+            doc.splitTextToSize(ESSAY_INSTRUCTION, TEXT_WIDTH);
 
+        ensureSpace(instructionLines.length * lineHeight + 6 + lineHeight);
 
-        // First page of Section A
-        if (p === 0) {
+        doc.text(instructionLines, PAGE.left, qState.y);
+        qState.y += instructionLines.length * lineHeight + 6;
 
-            doc.setFont("Times", "Roman");
-            doc.setFontSize(12);
+        [["Section A", sectionA], ["Section B", sectionB]].forEach(
+            ([title, list]) => {
 
-            doc.text(
-                "Section A",
-                leftMargin + 2,
-                topMargin + 5
-            );
+                ensureSpace(lineHeight * 4);
 
-            let currentY = topMargin + 15;
+                doc.text(title, PAGE.left, qState.y);
+                qState.y += lineHeight + 2;
 
-            sectionA.forEach(q => {
-
-                const splitText =
-                    doc.splitTextToSize(
+                list.forEach(q => {
+                    const lines = doc.splitTextToSize(
                         `${q.question_number}. ${q.question_text}`,
-                        rightMargin - leftMargin - 4
+                        TEXT_WIDTH
                     );
 
-                doc.text(
-                    splitText,
-                    leftMargin + 2,
-                    currentY
-                );
+                    ensureSpace(lines.length * lineHeight + 4);
 
-                currentY +=
-                    splitText.length * lineHeight + 5;
-            });
-
-        } else {
-
-            // Continuation pages
-            doc.setFontSize(10);
-
-            doc.text(
-                "Candidates must not write on this margin",
-                rightMargin + 1,
-                topMargin + 5
-            );
-        }
-    }
-
-
-    // =====================================================
-    // SECTION B – 12 PAGES
-    // =====================================================
-
-    for (let p = 0; p < 12; p++) {
-
-        doc.addPage();
-
-        // Margins
-        doc.setLineWidth(0.3);
-
-        doc.line(
-            leftMargin,
-            topMargin,
-            leftMargin,
-            bottomMargin
-        );
-
-        doc.line(
-            rightMargin,
-            topMargin,
-            rightMargin,
-            bottomMargin
-        );
-
-        // Footer
-        doc.setFontSize(8);
-
-        doc.text(
-            "Section B",
-            leftMargin - 14,
-            bottomMargin + 3
-        );
-
-        doc.text(
-            String(answerPage),
-            pageWidth / 2,
-            bottomMargin + 3,
-            { align: "center" }
-        );
-
-        answerPage++;
-
-
-        // First page of Section B
-        if (p === 0) {
-
-            doc.setFont("Times", "Roman");
-            doc.setFontSize(12);
-
-            doc.text(
-                "Section B",
-                leftMargin + 2,
-                topMargin + 5
-            );
-
-            let currentY = topMargin + 15;
-
-            sectionB.forEach(q => {
-
-                const splitText =
-                    doc.splitTextToSize(
-                        `${q.question_number}. ${q.question_text}`,
-                        rightMargin - leftMargin - 4
-                    );
-
-                doc.text(
-                    splitText,
-                    leftMargin + 2,
-                    currentY
-                );
-
-                currentY +=
-                    splitText.length * lineHeight + 5;
-            });
-
-        } else {
-
-            doc.setFontSize(10);
-
-            doc.text(
-                "Candidates must not write on this margin",
-                rightMargin + 1,
-                topMargin + 5
-            );
-        }
-    }
-
-
-} else {
-
-    // =====================================================
-    // NORMAL PAPERS
-    // =====================================================
-
-    questions.forEach(q => {
-
-        const pagesNeeded =
-            q.marks === 125
-                ? 12
-                : Math.ceil(q.marks / 6);
-
-        for (let p = 0; p < pagesNeeded; p++) {
-
-            doc.addPage();
-
-            // Margins
-            doc.setLineWidth(0.3);
-
-            doc.line(
-                leftMargin,
-                topMargin,
-                leftMargin,
-                bottomMargin
-            );
-
-            doc.line(
-                rightMargin,
-                topMargin,
-                rightMargin,
-                bottomMargin
-            );
-
-            // Footer
-            const footerText =
-                window.footerPrefix
-                    ? q.question_id.replace(
-                        /^.*(?=_Q)/,
-                        window.footerPrefix
-                    )
-                    : q.question_id.replace(
-                        /^.*_/,
-                        ""
-                    );
-
-
-                    
-            doc.setFontSize(8);
-
-            doc.text(
-                footerText,
-                leftMargin - 14,
-                bottomMargin + 3
-            );
-
-            doc.text(
-                String(answerPage),
-                pageWidth / 2,
-                bottomMargin + 3,
-                { align: "center" }
-            );
-
-            answerPage++;
-
-            if (p === 0) {
-
-                doc.setFontSize(12);
-
-                doc.text(
-                    `Q. ${q.question_number}`,
-                    leftMargin - 10,
-                    topMargin + 5
-                );
-
-                const localWidth =
-                    rightMargin - leftMargin - 4;
-
-                const questionText =
-                    q.question_text || " ";
-
-                const splitText =
-                    doc.splitTextToSize(
-                        questionText,
-                        localWidth
-                    );
-
-                let currentY =
-                    topMargin + 5;
-
-                doc.text(
-                    splitText,
-                    leftMargin + 2,
-                    currentY
-                );
-
-                currentY = topMargin + 5;
-
-                const rightText = q.year
-                    ? `${q.marks} M / ${q.year}`
-                    : `${q.marks} M`;
-
-                doc.text(
-                    rightText,
-                    rightMargin + 1,
-                    currentY
-                );
-
-            } else {
-
-                const localWidth = 23;
-
-                const splitText =
-                    doc.splitTextToSize(
-                        "Candidates must not write on this margin",
-                        localWidth
-                    );
-
-                let currentY =
-                    topMargin + 5;
-
-                doc.text(
-                    splitText,
-                    rightMargin + 1,
-                    currentY
-                );
-            }
-        }
-    });
-}
-
-}
-    window.generatedPDF = doc;
-    if (window.generatedPDF) {
-
-window.generatedPDF.save(window.pdfFileName);
-
-    }
-    //document.getElementById("downloadPDF").style.display = "inline-block";
-    //alert("QCAB PDF generated! Click 'Download QCAB PDF' to save.");
-}
-
-document.getElementById("downloadPDF").addEventListener("click", () => {
-    if (window.generatedPDF) {
-        window.generatedPDF.save(pdfFileName);
-        // hide again after downloading
-        document.getElementById("downloadPDF").style.display = "none";
-    }
-});
-
-// ---------------------------------------------------------
-// DOWNLOAD QUESTIONS ONLY
-// ---------------------------------------------------------
-
-document.getElementById("downloadQuestions").addEventListener("click", () => {
-
-    if (typeof window.getSelectedQuestions !== "function") {
-        alert("Selection logic not loaded!");
-        return;
-    }
-
-    const selectedQuestions = window.getSelectedQuestions();
-
-    if (selectedQuestions.length === 0) {
-        alert("Select questions first!");
-        return;
-    }
-
-    selectedQuestions.sort((a, b) => a.marks - b.marks);
-
-    selectedQuestions.forEach((q) => {
-        const match = q.question_id?.match(/_Q(\d+)$/);
-
-        if (match) {
-            q.question_number = Number(match[1]);
-        } else {
-            q.question_number =
-                selectedQuestions.indexOf(q) + 1;
-        }
-    });
-
-   
-    const intelligentName =
-    getIntelligentFilename(selectedQuestions, "questions");
-
-if (intelligentName) {
-
-    window.footerPrefix =
-        `${selectedQuestions[0].year}_${selectedQuestions[0].gs_paper}`;
-
-    window.pdfFileName = intelligentName;
-
-} else {
-
-    const footerName = prompt(
-        "Enter filename prefix:",
-        window.currentSourceFileName || ""
-    );
-
-    if (footerName === null) return;
-
-    window.footerPrefix =
-        footerName.trim() ||
-        window.currentSourceFileName;
-
-    window.pdfFileName =
-        `${footerName.trim() || window.currentSourceFileName || "Questions"}_Questions.pdf`;
-}
-
-    generateQCABPDF(
-        selectedQuestions,
-        "questions"
-    );
-});
-
-
-// ---------------------------------------------------------
-// DOWNLOAD ANSWERS BOOKLET ONLY
-// ---------------------------------------------------------
-
-document.getElementById("downloadAnswersBooklet").addEventListener("click", () => {
-
-    if (typeof window.getSelectedQuestions !== "function") {
-        alert("Selection logic not loaded!");
-        return;
-    }
-
-    const selectedQuestions = window.getSelectedQuestions();
-
-    if (selectedQuestions.length === 0) {
-        alert("Select questions first!");
-        return;
-    }
-
-    // Same ordering as QCAB
-    selectedQuestions.sort((a, b) => a.marks - b.marks);
-
-    // Same question numbering as QCAB
-    selectedQuestions.forEach((q) => {
-
-        const match = q.question_id?.match(/_Q(\d+)$/);
-
-        if (match) {
-            q.question_number = Number(match[1]);
-        } else {
-            q.question_number =
-                selectedQuestions.indexOf(q) + 1;
-        }
-
-    });
-
-    const isEssayPaper = selectedQuestions.some(
-        q => q.gs_paper === "Essay"
-    );
-
-    // Essay starts directly with its answer booklet.
-    // Normal papers get the blank-page choice.
-    let keepBlank = false;
-
-    if (!isEssayPaper) {
-
-        keepBlank = confirm(
-            "It is recommended to keep the first page intentionally blank " +
-            "to emulate exam-style pattern (Q1 starting on left side).\n\n" +
-            "Keep first page blank?"
-        );
-
-    }
-
-const intelligentName =
-    getIntelligentFilename(selectedQuestions, "answers");
-
-if (intelligentName) {
-
-    window.footerPrefix =
-        `${selectedQuestions[0].year}_${selectedQuestions[0].gs_paper}`;
-
-    window.pdfFileName = intelligentName;
-
-} else {
-
-    const footerName = prompt(
-        "Enter filename prefix:",
-        window.currentSourceFileName || ""
-    );
-
-    if (footerName === null) return;
-
-    window.footerPrefix =
-        footerName.trim() ||
-        window.currentSourceFileName;
-
-    window.pdfFileName =
-        `${footerName.trim() || window.currentSourceFileName || "Answers"}_Answers_Booklet.pdf`;
-}
-
-    // ---------------------------------------------------------
-    // CREATE PDF
-    // ---------------------------------------------------------
-
-    const { jsPDF } = window.jspdf;
-
-    const doc = new jsPDF({
-        unit: "mm",
-        format: "a4"
-    });
-
-    const pageHeight = 297;
-    const pageWidth = 210;
-
-    const leftMargin = 15;
-    const rightMargin = 188;
-    const topMargin = 15;
-    const bottomMargin = 282;
-
-    const lineHeight = 6;
-
-    doc.setFont("Times", "Roman");
-    doc.setFontSize(12);
-
-
-    // ---------------------------------------------------------
-    // OPTIONAL FIRST BLANK PAGE
-    // ---------------------------------------------------------
-
-if (keepBlank) {
-
-    doc.setFont("Times", "Italic");
-    doc.setFontSize(10);
-
-    doc.text(
-        "Intentionally left blank",
-        pageWidth - 15,
-        pageHeight - 10,
-        { align: "right" }
-    );
-
-    // Restore default font
-    doc.setFont("Times", "Roman");
-    doc.setFontSize(12);
-}
-
-    // ---------------------------------------------------------
-    // ANSWER BOOKLET
-    // ---------------------------------------------------------
-
-    let answerPage = 1;
-
-
-    // =========================================================
-    // ESSAY
-    // =========================================================
-
-    if (isEssayPaper) {
-
-        const sectionA = selectedQuestions
-            .filter(q =>
-                q.question_number >= 1 &&
-                q.question_number <= 4
-            )
-            .sort(
-                (a, b) =>
-                    a.question_number - b.question_number
-            );
-
-        const sectionB = selectedQuestions
-            .filter(q =>
-                q.question_number >= 5 &&
-                q.question_number <= 8
-            )
-            .sort(
-                (a, b) =>
-                    a.question_number - b.question_number
-            );
-
-
-        // -----------------------------------------------------
-        // SECTION A – 12 PAGES
-        // -----------------------------------------------------
-
-        for (let p = 0; p < 12; p++) {
-
-            // First page uses existing page only if there
-            // is no intentional blank page.
-            if (p > 0 || keepBlank) {
-                doc.addPage();
-            }
-
-            doc.setLineWidth(0.3);
-
-            doc.line(
-                leftMargin,
-                topMargin,
-                leftMargin,
-                bottomMargin
-            );
-
-            doc.line(
-                rightMargin,
-                topMargin,
-                rightMargin,
-                bottomMargin
-            );
-
-
-            doc.setFontSize(8);
-
-            doc.text(
-                "Section A",
-                leftMargin - 14,
-                bottomMargin + 3
-            );
-
-            doc.text(
-                String(answerPage),
-                pageWidth / 2,
-                bottomMargin + 3,
-                { align: "center" }
-            );
-
-            answerPage++;
-
-
-            // First page of Section A
-            if (p === 0) {
-
-                doc.setFont("Times", "Roman");
-                doc.setFontSize(12);
-
-                doc.text(
-                    "Section A",
-                    leftMargin + 2,
-                    topMargin + 5
-                );
-
-                let currentY = topMargin + 15;
-
-                sectionA.forEach(q => {
-
-                    const splitText =
-                        doc.splitTextToSize(
-                            `${q.question_number}. ${q.question_text}`,
-                            rightMargin - leftMargin - 4
-                        );
-
-                    doc.text(
-                        splitText,
-                        leftMargin + 2,
-                        currentY
-                    );
-
-                    currentY +=
-                        splitText.length * lineHeight + 5;
-
+                    doc.text(lines, PAGE.left, qState.y);
+                    qState.y += lines.length * lineHeight + 4;
                 });
 
+                qState.y += 4;
+            }
+        );
+    };
+
+    const renderNormalQuestions = (group) => {
+
+        group.questions.forEach(q => {
+
+            const qHeader = `${q.question_number}. `;
+            const qText = `${q.question_text}   [${q.marks} M]`;
+
+            const splitText = doc.splitTextToSize(qText, TEXT_WIDTH);
+            const totalHeight = splitText.length * lineHeight + lineHeight;
+
+            ensureSpace(totalHeight);
+
+            doc.text(qHeader, PAGE.left, qState.y);
+            doc.text(splitText, TEXT_X, qState.y);
+
+            qState.y += totalHeight;
+        });
+    };
+
+    const renderQuestionBlock = (group, footerText) => {
+
+        // Essay keeps no footer on QCAB question pages (as before),
+        // but is tagged in the Questions-only PDF.
+        qState.footer =
+            (group.isEssay && mode !== "questions") ? "" : footerText;
+
+        doc.setFont("Times", "normal");
+        doc.setFontSize(12);
+
+        const needed = group.isEssay ? 40 : firstQuestionHeight(group);
+
+        if (!qState.open) {
+
+            // Very first page of the question section
+            openQuestionPage();
+            drawPaperLabelAbove(group.label);
+
+        } else {
+
+            // Papers flowing one after another (Questions-only PDF):
+            // dashed break + paper name, no page break.
+            const separatorHeight = 3 + 7 + lineHeight;
+
+            if (qState.y + separatorHeight + needed > PAGE.height - 15) {
+
+                openQuestionPage();
+                drawPaperLabelAbove(group.label);
+
             } else {
 
-                doc.setFontSize(10);
+                qState.y += 3;
 
-                doc.text(
-                    "Candidates must not write on this margin",
-                    rightMargin + 1,
-                    topMargin + 5
-                );
+                doc.setLineWidth(0.3);
+                doc.setLineDashPattern([2, 2], 0);
+                doc.line(PAGE.left, qState.y, PAGE.right, qState.y);
+                doc.setLineDashPattern([], 0);
 
+                qState.y += 7;
+
+                if (group.label) {
+                    doc.setFont("Times", "bold");
+                    doc.setFontSize(11);
+                    doc.text(group.label, PAGE.left, qState.y);
+                    doc.setFont("Times", "normal");
+                    doc.setFontSize(12);
+                }
+
+                qState.y += lineHeight;
+
+                // New paper starts on the current page: tag it too
+                addTag(qState.footer);
             }
-
         }
 
+        if (group.isEssay) {
+            renderEssayQuestions(group);
+        } else {
+            renderNormalQuestions(group);
+        }
+    };
 
-        // -----------------------------------------------------
-        // SECTION B – 12 PAGES
-        // -----------------------------------------------------
+    // -----------------------------------------------------
+    // ANSWER PAGES
+    // -----------------------------------------------------
 
-        for (let p = 0; p < 12; p++) {
+    const renderAnswerBooklet = (group, prefix) => {
 
-            doc.addPage();
+        // Page numbering restarts for every paper's booklet
+        let answerPage = 1;
+
+        const drawFrame = (footerText) => {
+
+            startPage();
 
             doc.setLineWidth(0.3);
 
-            doc.line(
-                leftMargin,
-                topMargin,
-                leftMargin,
-                bottomMargin
-            );
+            doc.line(PAGE.left, PAGE.top, PAGE.left, PAGE.bottom);
+            doc.line(PAGE.right, PAGE.top, PAGE.right, PAGE.bottom);
 
-            doc.line(
-                rightMargin,
-                topMargin,
-                rightMargin,
-                bottomMargin
-            );
-
-
+            doc.setFont("Times", "normal");
             doc.setFontSize(8);
 
-            doc.text(
-                "Section B",
-                leftMargin - 14,
-                bottomMargin + 3
-            );
+            doc.text(footerText, PAGE.left - 14, PAGE.bottom + 3);
 
             doc.text(
                 String(answerPage),
-                pageWidth / 2,
-                bottomMargin + 3,
+                PAGE.width / 2,
+                PAGE.bottom + 3,
                 { align: "center" }
             );
 
             answerPage++;
+        };
 
+        const drawMarginNote = () => {
+            doc.setFontSize(8);
 
-            if (p === 0) {
+            const splitText = doc.splitTextToSize(MARGIN_NOTE, 23);
 
-                doc.setFont("Times", "Roman");
-                doc.setFontSize(12);
+            doc.text(splitText, PAGE.right + 1, PAGE.top + 5);
+        };
 
-                doc.text(
-                    "Section B",
-                    leftMargin + 2,
-                    topMargin + 5
-                );
+        // ---------------- ESSAY ----------------
 
-                let currentY = topMargin + 15;
+        if (group.isEssay) {
 
-                sectionB.forEach(q => {
+            const sectionA = group.questions.filter(
+                q => q.question_number >= 1 && q.question_number <= 4
+            );
 
-                    const splitText =
-                        doc.splitTextToSize(
-                            `${q.question_number}. ${q.question_text}`,
-                            rightMargin - leftMargin - 4
-                        );
+            const sectionB = group.questions.filter(
+                q => q.question_number >= 5 && q.question_number <= 8
+            );
 
-                    doc.text(
-                        splitText,
-                        leftMargin + 2,
-                        currentY
-                    );
+            [["Section A", sectionA], ["Section B", sectionB]].forEach(
+                ([title, list]) => {
 
-                    currentY +=
-                        splitText.length * lineHeight + 5;
+                    const footerText = prefix ? `${prefix}_${title}` : title;
 
-                });
+                    for (let p = 0; p < 12; p++) {
 
-            } else {
+                        drawFrame(footerText);
 
-                doc.setFontSize(10);
+                        if (p === 0) {
 
-                doc.text(
-                    "Candidates must not write on this margin",
-                    rightMargin + 1,
-                    topMargin + 5
-                );
+                            doc.setFontSize(12);
 
-            }
+                            doc.text(
+                                title,
+                                PAGE.left + 2,
+                                PAGE.top + 5
+                            );
 
+                            let currentY = PAGE.top + 15;
+
+                            list.forEach(q => {
+                                const splitText = doc.splitTextToSize(
+                                    `${q.question_number}. ${q.question_text}`,
+                                    PAGE.right - PAGE.left - 4
+                                );
+
+                                doc.text(
+                                    splitText,
+                                    PAGE.left + 2,
+                                    currentY
+                                );
+
+                                currentY += splitText.length * lineHeight + 5;
+                            });
+
+                        } else {
+                            drawMarginNote();
+                        }
+                    }
+                }
+            );
+
+            return;
         }
 
+        // ---------------- NORMAL PAPERS ----------------
 
-    // =========================================================
-    // NORMAL PAPERS
-    // =========================================================
+        group.questions.forEach(q => {
 
-    } else {
-
-        selectedQuestions.forEach(q => {
+            const marks = Number(q.marks);
 
             const pagesNeeded =
-                q.marks === 125
-                    ? 12
-                    : Math.ceil(q.marks / 6);
+                (marks === 125 ? 12 : Math.ceil(marks / 6)) || 1;
 
+            const footerText = answerFooterText(q, prefix);
 
             for (let p = 0; p < pagesNeeded; p++) {
 
-                // First page:
-                // - use page 1 if no blank page requested
-                // - use page 2 if blank page requested
-                if (p > 0 || keepBlank) {
-                    doc.addPage();
-                }
+                drawFrame(footerText);
 
-                doc.setLineWidth(0.3);
-
-                doc.line(
-                    leftMargin,
-                    topMargin,
-                    leftMargin,
-                    bottomMargin
-                );
-
-                doc.line(
-                    rightMargin,
-                    topMargin,
-                    rightMargin,
-                    bottomMargin
-                );
-
-
-                const footerText =
-                    window.footerPrefix
-                        ? q.question_id.replace(
-                            /^.*(?=_Q)/,
-                            window.footerPrefix
-                        )
-                        : q.question_id.replace(
-                            /^.*_/,
-                            ""
-                        );
-
-
-                doc.setFontSize(8);
-
-                doc.text(
-                    footerText,
-                    leftMargin - 14,
-                    bottomMargin + 3
-                );
-
-                doc.text(
-                    String(answerPage),
-                    pageWidth / 2,
-                    bottomMargin + 3,
-                    { align: "center" }
-                );
-
-                answerPage++;
-
-
-                // First page of this question
                 if (p === 0) {
 
                     doc.setFontSize(12);
 
                     doc.text(
                         `Q. ${q.question_number}`,
-                        leftMargin - 10,
-                        topMargin + 5
+                        PAGE.left - 10,
+                        PAGE.top + 5
                     );
 
-
-                    const localWidth =
-                        rightMargin - leftMargin - 4;
-
-                    const questionText =
-                        q.question_text || " ";
-
-
-                    const splitText =
-                        doc.splitTextToSize(
-                            questionText,
-                            localWidth
-                        );
-
-
-                    let currentY =
-                        topMargin + 5;
-
-
-                    doc.text(
-                        splitText,
-                        leftMargin + 2,
-                        currentY
+                    const splitText = doc.splitTextToSize(
+                        q.question_text || " ",
+                        PAGE.right - PAGE.left - 4
                     );
 
-
-                    currentY =
-                        topMargin + 5;
-
+                    doc.text(splitText, PAGE.left + 2, PAGE.top + 5);
 
                     const rightText = q.year
                         ? `${q.marks} M / ${q.year}`
                         : `${q.marks} M`;
 
-
-                    doc.text(
-                        rightText,
-                        rightMargin + 1,
-                        currentY
-                    );
-
+                    doc.text(rightText, PAGE.right + 1, PAGE.top + 5);
 
                 } else {
-
-                    const localWidth = 23;
-
-                    const splitText =
-                        doc.splitTextToSize(
-                            "Candidates must not write on this margin",
-                            localWidth
-                        );
-
-
-                    let currentY =
-                        topMargin + 5;
-
-
-                    doc.text(
-                        splitText,
-                        rightMargin + 1,
-                        currentY
-                    );
-
+                    drawMarginNote();
                 }
+            }
+        });
+    };
 
+    // -----------------------------------------------------
+    // BUILD THE DOCUMENT, PAPER BY PAPER
+    // -----------------------------------------------------
+
+    groups.forEach(group => {
+
+        const prefix = footerPrefixFor(group, isMulti);
+
+        // ---- Questions ----
+
+        if (mode !== "answers") {
+
+            // QCAB: every paper starts its own question section on a new page.
+            // Questions-only: papers flow together on the same pages.
+            if (mode === "qcab") qState.open = false;
+
+            renderQuestionBlock(group, prefix);
+
+            if (mode === "qcab") {
+
+                // Essay always gets an intentional blank page.
+                // Other papers get one so that the answer booklet
+                // always starts on an even (left-hand) page.
+                if (group.isEssay || doc.getNumberOfPages() % 2 === 0) {
+                    drawBlankPage();
+                }
+            }
+        }
+
+        // ---- Answers ----
+
+        if (mode !== "questions") {
+
+            // Answers-only: optionally keep Q1 of each paper on the left side
+            if (
+                mode === "answers" &&
+                keepBlankFirstPage &&
+                !group.isEssay &&
+                pagesSoFar() % 2 === 0
+            ) {
+                drawBlankPage();
             }
 
-        });
+            renderAnswerBooklet(group, prefix);
+        }
+    });
 
-    }
+    // Draw bottom-left footers on question pages (YYYY_Paper, or
+    // several separated by " | " when papers share a page)
+    pageTags.forEach((tags, page) => {
+        doc.setPage(page);
+        doc.setFont("Times", "normal");
+        doc.setFontSize(8);
+        doc.text(tags.join("  |  "), PAGE.left - 14, PAGE.bottom + 3);
+    });
 
-
-    // ---------------------------------------------------------
-    // SAVE
-    // ---------------------------------------------------------
+    doc.setPage(doc.getNumberOfPages());
 
     window.generatedPDF = doc;
 
-    window.generatedPDF.save(
-        window.pdfFileName
-    );
+    if (window.generatedPDF) {
+        window.generatedPDF.save(window.pdfFileName);
+    }
+}
 
+
+// ---------------------------------------------------------
+// BUTTON HANDLERS
+// ---------------------------------------------------------
+
+document.getElementById("generateQCAB").addEventListener("click", () => {
+
+    const selected = getSelection();
+    if (!selected) return;
+
+    if (!resolveNaming(selected, "qcab")) return;
+
+    generateQCABPDF(selected, "qcab");
+});
+
+document.getElementById("downloadPDF").addEventListener("click", () => {
+    if (window.generatedPDF) {
+        window.generatedPDF.save(window.pdfFileName);
+        // hide again after downloading
+        document.getElementById("downloadPDF").style.display = "none";
+    }
+});
+
+// DOWNLOAD QUESTIONS ONLY
+document.getElementById("downloadQuestions").addEventListener("click", () => {
+
+    const selected = getSelection();
+    if (!selected) return;
+
+    if (!resolveNaming(selected, "questions")) return;
+
+    generateQCABPDF(selected, "questions");
+});
+
+// DOWNLOAD ANSWERS BOOKLET ONLY
+document.getElementById("downloadAnswersBooklet").addEventListener("click", () => {
+
+    const selected = getSelection();
+    if (!selected) return;
+
+    // Essay starts directly with its answer booklet.
+    // Other papers get the blank-page choice.
+    let keepBlank = false;
+
+    if (selected.some(q => q.gs_paper !== "Essay")) {
+        keepBlank = confirm(
+            "It is recommended to keep the first page intentionally blank " +
+            "to emulate exam-style pattern (Q1 starting on left side).\n\n" +
+            "Keep first page blank?"
+        );
+    }
+
+    if (!resolveNaming(selected, "answers")) return;
+
+    generateQCABPDF(selected, "answers", keepBlank);
 });
