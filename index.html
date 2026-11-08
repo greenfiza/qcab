@@ -151,6 +151,14 @@
                     Generate and Download QCAB PDF
                 </button>
 
+                <label class="toggle" title="Off: each paper is Questions then Answers. On: all questions first, then all answer booklets.">
+                    <input type="checkbox" id="questionsFirstToggle">
+                    Put all questions first
+                </label>
+
+            
+                  </div>
+    <div class="actions">
                 <button type="button" id="downloadPDF" class="btn" style="display:none;">
                     Download QCAB PDF
                 </button>
@@ -200,7 +208,96 @@
 <script src="js/populateQuestions.js"></script>
 <script src="js/generatePDF.js"></script>
 <script src="js/randomExtras.js"></script>
-<script src="js/autoAddPending.js"></script>
+
+<script>
+
+(function () {
+    'use strict';
+
+    const $ = function (id) { return document.getElementById(id); };
+
+    // Buttons that should trigger the automatic "Add to list".
+    const ACTION_IDS = [
+        'generateQCAB', 'downloadPDF', 'downloadQuestions', 'downloadAnswersBooklet',
+        'exportMarkdown', 'generateRandomQuestions', 'randomModalBtn', 'addCustomQuestions'
+    ];
+
+    let lastAddedSignature = '';
+
+    function activeMode() {
+        const syl = $('modeSyllabus');
+        return syl && !syl.hidden ? 'syllabus' : 'year-gs';
+    }
+
+    function signature(mode) {
+        if (mode === 'syllabus') {
+            return 'S|' + ($('gsPaperFilter2') || {}).value + '|' + ($('syllabusFilter') || {}).value;
+        }
+        return 'Y|' + ($('yearChips') ? $('yearChips').innerHTML : '') +
+               '|' + ($('paperChips') ? $('paperChips').innerHTML : '');
+    }
+
+    function addPendingSelection() {
+        const mode = activeMode();
+        const addBtn = mode === 'syllabus' ? $('addSyllabusSetBtn') : $('addSetBtn');
+        if (!addBtn || addBtn.disabled) return;          // nothing pending
+
+        const sig = signature(mode);
+        if (sig === lastAddedSignature) return;          // this exact selection was already added
+
+        lastAddedSignature = sig;
+        addBtn.click();
+
+        const status = $('statusMsg');
+        if (status) status.textContent = 'Your pending selection was added to the list automatically.';
+    }
+
+    // Capture phase on document runs before the buttons' own click handlers.
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest ? e.target.closest('button') : null;
+        if (!btn || ACTION_IDS.indexOf(btn.id) === -1) return;
+        addPendingSelection();
+        if (btn.id === 'randomModalBtn') addEverythingIfListEmpty();
+    }, true);
+
+    // Random modal with nothing selected and nothing in the list:
+    // assume the user wants everything (all years, all papers).
+    function addEverythingIfListEmpty() {
+        const rows = document.querySelectorAll('#questionsTable tbody tr');
+        if (rows.length > 0) return;
+
+        if (activeMode() === 'syllabus') {
+            const tab = document.querySelector('.tab[data-mode="year-gs"]');
+            if (tab) tab.click();
+        }
+
+        const yearsAll = $('yearsAll');
+        const papersAll = $('papersAll');
+        const addBtn = $('addSetBtn');
+        if (!yearsAll || !papersAll || !addBtn) return;
+
+        yearsAll.click();
+        papersAll.click();
+        if (addBtn.disabled) return;
+
+        lastAddedSignature = signature('year-gs');
+        addBtn.click();
+
+        const status = $('statusMsg');
+        if (status) status.textContent = 'Nothing was selected, so all years and papers were added.';
+    }
+
+    // Tab switch or a manual "Add to list" resets the guard so later picks work.
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest ? e.target.closest('button') : null;
+        if (!btn) return;
+        if (btn.id === 'addSetBtn' || btn.id === 'addSyllabusSetBtn' ||
+            btn.id === 'resetQuestions' || btn.classList.contains('tab')) {
+            lastAddedSignature = '';
+        }
+    });
+})();
+</script>
 
 </body>
 </html>
