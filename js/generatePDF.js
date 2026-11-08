@@ -16,6 +16,15 @@ const yyyy = today.getFullYear();
 const mm = String(today.getMonth() + 1).padStart(2, "0");
 const dd = String(today.getDate()).padStart(2, "0");
 
+// Adds "YYYY-MM-DD_" in front of a file name unless it already
+// starts with a full date. Also usable by other scripts (e.g. .md export).
+function withDatePrefix(name) {
+    const clean = String(name || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(clean)) return clean;
+    return `${yyyy}-${mm}-${dd}_${clean}`;
+}
+window.withDatePrefix = withDatePrefix;
+
 const PAGE = {
     width: 210,
     height: 297,
@@ -604,7 +613,42 @@ function generateQCABPDF(questions, mode = "qcab", keepBlankFirstPage = false) {
     // BUILD THE DOCUMENT, PAPER BY PAPER
     // -----------------------------------------------------
 
-    groups.forEach(group => {
+    // "All questions first" layout (QCAB only):
+    //   [all question pages] -> [all answer booklets]
+    // Used when the toggle is on, or automatically when the list has
+    // fewer than 20 questions (so the set is not split into
+    // Question pages / Answer pages / Question pages / Answer pages).
+    const toggleEl = document.getElementById("questionsFirstToggle");
+    const questionsFirst = !!(toggleEl && toggleEl.checked);
+
+    const combineAll =
+        mode === "qcab" &&
+        groups.length > 1 &&
+        (questionsFirst || questions.length < 20);
+
+    if (combineAll) {
+
+        qState.open = false;
+
+        groups.forEach(group => {
+            renderQuestionBlock(group, footerPrefixFor(group, isMulti));
+        });
+
+        // Answer booklets start on a left-hand (even) page.
+        // Essay always gets an intentional blank page.
+        if (
+            groups.some(g => g.isEssay) ||
+            doc.getNumberOfPages() % 2 === 0
+        ) {
+            drawBlankPage();
+        }
+
+        groups.forEach(group => {
+            renderAnswerBooklet(group, footerPrefixFor(group, isMulti));
+        });
+    }
+
+    (combineAll ? [] : groups).forEach(group => {
 
         const prefix = footerPrefixFor(group, isMulti);
 
@@ -659,6 +703,9 @@ function generateQCABPDF(questions, mode = "qcab", keepBlankFirstPage = false) {
     doc.setPage(doc.getNumberOfPages());
 
     window.generatedPDF = doc;
+
+    // Every saved file starts with today's date (YYYY-MM-DD)
+    window.pdfFileName = withDatePrefix(window.pdfFileName);
 
     if (window.generatedPDF) {
         window.generatedPDF.save(window.pdfFileName);
